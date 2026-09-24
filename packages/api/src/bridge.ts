@@ -147,6 +147,7 @@ export class Bridge extends Service {
       dispose: () => {
         if (!subscriptions.delete(subscription)) return
         inner.dispose()
+        if (!subscriptions.size) this.subscriptions.delete(channel)
       },
     }
     subscriptions.add(subscription)

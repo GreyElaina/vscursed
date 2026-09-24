@@ -20,6 +20,7 @@ export class SettingsSchema extends Disposable {
   private readonly schemas = new Map<string, RealmSchemas>()
   private plugins: readonly PluginDescriptor[] = []
   private node: IConfigurationNode | undefined
+  private rendered = ''
 
   constructor() {
     super()
@@ -34,16 +35,23 @@ export class SettingsSchema extends Disposable {
 
   /** Replaces what one realm reported: a map from plugin id to its schema, `null` for no `Config`. */
   report(realm: Realm, schemas: Readonly<Record<string, JsonSchema | null>>) {
+    const changed = new Set<string>()
     for (const [id, realms] of this.schemas) {
-      if (!(id in schemas)) delete realms[realm]
+      if (!(id in schemas) && realm in realms) {
+        delete realms[realm]
+        changed.add(id)
+      }
       if (!Object.keys(realms).length) this.schemas.delete(id)
     }
     for (const [id, schema] of Object.entries(schemas)) {
       const realms = this.schemas.get(id) ?? {}
+      if (realm in realms && (realms[realm] === schema || JSON.stringify(realms[realm]) === JSON.stringify(schema)))
+        continue
       realms[realm] = schema
       this.schemas.set(id, realms)
+      changed.add(id)
     }
-    this.render()
+    if (this.plugins.some(plugin => changed.has(plugin.id))) this.render()
   }
 
   private render() {
@@ -71,7 +79,10 @@ export class SettingsSchema extends Disposable {
         },
       },
     }
+    const rendered = JSON.stringify(node)
+    if (rendered === this.rendered) return
     this.registry.updateConfigurations({ add: [node], remove: this.node ? [this.node] : [] })
     this.node = node
+    this.rendered = rendered
   }
 }

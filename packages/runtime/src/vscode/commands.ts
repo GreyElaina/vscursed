@@ -92,11 +92,13 @@ export function channelOverCommands(side: LinkSide, link: CommandLink, initially
       return emitter.event as Emitter<T>['event']
     },
     ready() {
+      if (isReady) return
       isReady = true
       ready.resolve()
       for (const id of listeners.keys()) subscribe(id)
     },
     reset() {
+      if (!isReady) return
       isReady = false
       ready = Promise.withResolvers<void>()
     },

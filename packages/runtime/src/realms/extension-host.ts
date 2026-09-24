@@ -5,6 +5,7 @@ import { ILogService } from 'vscode-internal/vs/platform/log/common/log.js'
 import { IExtHostCommands } from 'vscode-internal/vs/workbench/api/common/extHostCommands.js'
 import { IExtHostConfiguration } from 'vscode-internal/vs/workbench/api/common/extHostConfiguration.js'
 import { IExtHostExtensionService } from 'vscode-internal/vs/workbench/api/common/extHostExtensionService.js'
+import { sameRealmPlugins } from '../kernel/descriptors.ts'
 import type { PluginSource, SettingsSource } from '../kernel/host.ts'
 import { startRealm } from '../kernel/realm.ts'
 import { channelTransport, RealmServer, type UncleanUnload } from '../vscode/channel.ts'
@@ -35,19 +36,26 @@ export const start: typeof Start = instantiationService => {
   const plugins: PluginSource = { current: () => descriptors, onDidChange: listener => pluginChanges.event(listener) }
   void extensionService.getExtensionRegistry().then(registry => {
     const read = () => {
-      descriptors = describePlugins(registry.getAllExtensionDescriptions(), message => log('warn', message))
-      pluginChanges.fire()
+      const next = describePlugins(registry.getAllExtensionDescriptions(), message => log('warn', message))
+      const changed = !sameRealmPlugins(descriptors, next, 'extensionHost')
+      descriptors = next
+      if (changed) pluginChanges.fire()
     }
     registry.onDidChange(read)
     read()
   })
 
   let values: Readonly<Record<string, unknown>> = {}
+  let serializedValues = JSON.stringify(values)
   const settingChanges = new Emitter<void>()
   const settings: SettingsSource = { current: () => values, onDidChange: listener => settingChanges.event(listener) }
   void configuration.getConfigProvider().then(provider => {
     const read = () => {
-      values = asSettings(provider.getConfiguration().get(pluginsSetting))
+      const next = asSettings(provider.getConfiguration().get(pluginsSetting))
+      const serialized = JSON.stringify(next)
+      if (serialized === serializedValues) return
+      values = next
+      serializedValues = serialized
       settingChanges.fire()
     }
     provider.onDidChangeConfiguration(event => event.affectsConfiguration(pluginsSetting) && read())

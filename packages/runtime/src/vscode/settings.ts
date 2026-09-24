@@ -9,11 +9,19 @@ export function asSettings(value: unknown): Readonly<Record<string, unknown>> {
 }
 
 export function configurationSettings(configurationService: IConfigurationService): SettingsSource {
+  let current = asSettings(configurationService.getValue(pluginsSetting))
+  let serialized = JSON.stringify(current)
   return {
-    current: () => asSettings(configurationService.getValue(pluginsSetting)),
+    current: () => current,
     onDidChange: listener =>
       configurationService.onDidChangeConfiguration(event => {
-        if (event.affectsConfiguration(pluginsSetting)) listener()
+        if (!event.affectsConfiguration(pluginsSetting)) return
+        const next = asSettings(configurationService.getValue(pluginsSetting))
+        const nextSerialized = JSON.stringify(next)
+        if (nextSerialized === serialized) return
+        current = next
+        serialized = nextSerialized
+        listener()
       }),
   }
 }

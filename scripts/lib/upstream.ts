@@ -143,8 +143,7 @@ function worktreeTree() {
   return writeTree(env => git(['add', '-A'], { env }).then(() => {}))
 }
 
-async function patchedTree() {
-  const patches = await listPatches()
+async function patchedTree(patches: readonly string[]) {
   return writeTree(async env => {
     await git(['read-tree', baseTag], { env })
     for (const patch of patches) await git(['apply', '--cached', '--whitespace=nowarn', patch], { env })
@@ -154,9 +153,10 @@ async function patchedTree() {
 /** Resets the tree to the prepared base plus `upstream/patches`; returns whether anything changed. */
 export async function applyPatches(force: boolean) {
   if (!(await hasBase())) throw new Error('The VSCodium tree is not prepared; run `pnpm upstream prepare` first.')
+  const patches = await listPatches()
   const [current, expected, base] = await Promise.all([
     worktreeTree(),
-    patchedTree(),
+    patchedTree(patches),
     git(['rev-parse', `${baseTag}^{tree}`], { capture: true }).then(out => out.trim()),
   ])
   if (current === expected) {
@@ -171,7 +171,7 @@ export async function applyPatches(force: boolean) {
   await git(['reset', '-q', '--hard', baseTag])
   // Ignored files (dependencies, build output, the VSCursed runtime bundle) survive the clean.
   await git(['clean', '-fdq'])
-  for (const patch of await listPatches()) {
+  for (const patch of patches) {
     console.log(`upstream: applying ${basename(patch)}`)
     await git(['apply', '--whitespace=nowarn', patch])
   }

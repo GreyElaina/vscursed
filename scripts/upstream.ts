@@ -8,8 +8,7 @@
  *   check           type-check the patched sources with VS Code's compiler and options
  *   package         VSCodium's production packaging of the patched tree
  */
-import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
@@ -24,6 +23,7 @@ import {
   prepareVSCodium,
   vscodeRoot,
   vscodiumEnv,
+  workspaceRoot,
 } from './lib/upstream.ts'
 
 const { positionals, values } = parseArgs({
@@ -32,7 +32,9 @@ const { positionals, values } = parseArgs({
 })
 
 async function diff(newPatch: string | undefined) {
-  const dir = await mkdtemp(join(tmpdir(), 'vscursed-index-'))
+  const workRoot = join(workspaceRoot, '.vscursed')
+  await mkdir(workRoot, { recursive: true })
+  const dir = await mkdtemp(join(workRoot, 'index-'))
   try {
     const index = join(dir, 'index')
     await copyFile(join(vscodeRoot, '.git/index'), index)
@@ -100,7 +102,9 @@ async function check() {
     }
   }
   files.add(join(vscodeRoot, 'node_modules/@webgpu/types/dist/index.d.ts'))
-  const dir = await mkdtemp(join(tmpdir(), 'vscursed-check-'))
+  const workRoot = join(workspaceRoot, '.vscursed')
+  await mkdir(workRoot, { recursive: true })
+  const dir = await mkdtemp(join(workRoot, 'check-'))
   try {
     const config = join(dir, 'tsconfig.json')
     await writeFile(

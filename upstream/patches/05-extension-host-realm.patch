@@ -1,0 +1,56 @@
+diff --git a/src/vs/workbench/api/common/extHostExtensionService.ts b/src/vs/workbench/api/common/extHostExtensionService.ts
+index 563438a2..5e4f5fa4 100644
+--- a/src/vs/workbench/api/common/extHostExtensionService.ts
++++ b/src/vs/workbench/api/common/extHostExtensionService.ts
+@@ -269,6 +269,17 @@ export abstract class AbstractExtHostExtensionService extends Disposable impleme
+ 		await Promise.all(allPromises);
+ 	}
+ 
++	private readonly _terminationParticipants = new Set<() => Promise<void>>();
++
++	/**
++	 * Lets `participant` finish before the host exits, within the same deadline that extension
++	 * deactivation has.
++	 */
++	public joinTermination(participant: () => Promise<void>): IDisposable {
++		this._terminationParticipants.add(participant);
++		return toDisposable(() => this._terminationParticipants.delete(participant));
++	}
++
+ 	public terminate(reason: string, code: number = 0): void {
+ 		if (this._isTerminating) {
+ 			// we are already shutting down...
+@@ -288,7 +299,10 @@ export abstract class AbstractExtHostExtensionService extends Disposable impleme
+ 		// Invalidate all proxies
+ 		this._extHostContext.dispose();
+ 
+-		const extensionsDeactivated = this._deactivateAll();
++		const extensionsDeactivated = Promise.all([
++			this._deactivateAll(),
++			...Array.from(this._terminationParticipants, participant => participant().catch(err => this._logService.error(err))),
++		]);
+ 
+ 		// Give extensions at most 5 seconds to wrap up any async deactivate, then exit
+ 		Promise.race([timeout(5000), extensionsDeactivated]).finally(() => {
+diff --git a/src/vs/workbench/api/node/extHostExtensionService.ts b/src/vs/workbench/api/node/extHostExtensionService.ts
+index ab221e8a..201ad018 100644
+--- a/src/vs/workbench/api/node/extHostExtensionService.ts
++++ b/src/vs/workbench/api/node/extHostExtensionService.ts
+@@ -24,6 +24,7 @@ import { assertType } from '../../../base/common/types.js';
+ import { generateUuid } from '../../../base/common/uuid.js';
+ import { BidirectionalMap } from '../../../base/common/map.js';
+ import { DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
++import { start as startVSCursed } from '../../../vscursed/runtime/extensionHost.js';
+ const require = nodeModule.createRequire(import.meta.url);
+ 
+ class NodeModuleRequireInterceptor extends RequireInterceptor {
+@@ -151,6 +152,9 @@ export class ExtHostExtensionService extends AbstractExtHostExtensionService {
+ 		// make sure console.log calls make it to the render
+ 		this._instaService.createInstance(ExtHostConsoleForwarder);
+ 
++		// VSCursed extension host realm
++		startVSCursed(this._instaService);
++
+ 		// initialize API and register actors
+ 		const extensionApiFactory = this._instaService.invokeFunction(createApiFactoryAndRegisterActors);
+ 

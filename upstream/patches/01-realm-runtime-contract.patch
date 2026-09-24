@@ -1,0 +1,88 @@
+diff --git a/.gitignore b/.gitignore
+index aa2eef92..a442d1f5 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -54,3 +54,7 @@ dist
+ .v[0-9]*/
+ # Local agent validation evidence
+ .agent-validation/
++
++# VSCursed realm runtime, bundled by @vscursed/runtime
++/src/vs/vscursed/runtime/*.js
++/src/vs/vscursed/runtime/*.js.map
+diff --git a/src/vs/vscursed/runtime/README.md b/src/vs/vscursed/runtime/README.md
+new file mode 100644
+index 00000000..d1d2c349
+--- /dev/null
++++ b/src/vs/vscursed/runtime/README.md
+@@ -0,0 +1,5 @@
++# VSCursed realm runtime
++
++The `.d.ts` files in this folder are the contract between VSCodium and the VSCursed realm runtime.
++The matching `.js` bundles are built by `@vscursed/runtime` in the VSCursed repository and are not
++tracked here. Each realm's composition root imports its bundle and starts it.
+diff --git a/src/vs/vscursed/runtime/extensionHost.d.ts b/src/vs/vscursed/runtime/extensionHost.d.ts
+new file mode 100644
+index 00000000..6df928f5
+--- /dev/null
++++ b/src/vs/vscursed/runtime/extensionHost.d.ts
+@@ -0,0 +1,11 @@
++/*---------------------------------------------------------------------------------------------
++ *  VSCursed. Licensed under the MIT License.
++ *--------------------------------------------------------------------------------------------*/
++
++import type { IInstantiationService } from '../../platform/instantiation/common/instantiation.js';
++
++/**
++ * Starts the realm of a local extension host: it loads the extension-host modules of the plugins that
++ * this host runs, and joins the host's termination to unload them.
++ */
++export declare function start(instantiationService: IInstantiationService): void;
+diff --git a/src/vs/vscursed/runtime/main.d.ts b/src/vs/vscursed/runtime/main.d.ts
+new file mode 100644
+index 00000000..fca76bed
+--- /dev/null
++++ b/src/vs/vscursed/runtime/main.d.ts
+@@ -0,0 +1,12 @@
++/*---------------------------------------------------------------------------------------------
++ *  VSCursed. Licensed under the MIT License.
++ *--------------------------------------------------------------------------------------------*/
++
++import type { IPCServer } from '../../base/parts/ipc/common/ipc.js';
++import type { IInstantiationService } from '../../platform/instantiation/common/instantiation.js';
++
++/**
++ * Starts the realm of the main process: it serves the `vscursed` channel on `server` and loads the
++ * main-process modules of the plugins that connected windows enable.
++ */
++export declare function start(instantiationService: IInstantiationService, server: IPCServer<string>): void;
+diff --git a/src/vs/vscursed/runtime/renderer.d.ts b/src/vs/vscursed/runtime/renderer.d.ts
+new file mode 100644
+index 00000000..27180369
+--- /dev/null
++++ b/src/vs/vscursed/runtime/renderer.d.ts
+@@ -0,0 +1,6 @@
++/*---------------------------------------------------------------------------------------------
++ *  VSCursed. Licensed under the MIT License.
++ *--------------------------------------------------------------------------------------------*/
++
++// Importing the renderer bundle registers the VSCursed workbench contribution.
++export { };
+diff --git a/src/vs/vscursed/runtime/sharedProcess.d.ts b/src/vs/vscursed/runtime/sharedProcess.d.ts
+new file mode 100644
+index 00000000..1f97598b
+--- /dev/null
++++ b/src/vs/vscursed/runtime/sharedProcess.d.ts
+@@ -0,0 +1,12 @@
++/*---------------------------------------------------------------------------------------------
++ *  VSCursed. Licensed under the MIT License.
++ *--------------------------------------------------------------------------------------------*/
++
++import type { IPCServer } from '../../base/parts/ipc/common/ipc.js';
++import type { IInstantiationService } from '../../platform/instantiation/common/instantiation.js';
++
++/**
++ * Starts the realm of the shared process: it serves the `vscursed` channel on `server` and loads the
++ * shared-process modules of the plugins that connected windows enable.
++ */
++export declare function start(instantiationService: IInstantiationService, server: IPCServer<string>): void;

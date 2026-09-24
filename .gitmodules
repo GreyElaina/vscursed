@@ -1,0 +1,3 @@
+[submodule "upstream/vscodium"]
+	path = upstream/vscodium
+	url = https://github.com/VSCodium/vscodium.git

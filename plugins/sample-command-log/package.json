@@ -1,0 +1,32 @@
+{
+  "name": "sample-command-log",
+  "displayName": "VSCursed Sample: Command Log",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Counts executed commands in the status bar by wrapping the workbench command service.",
+  "categories": [
+    "Other"
+  ],
+  "license": "MIT",
+  "publisher": "vscursed",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "vp pack && vscursed vsix",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@vscursed/api": "workspace:*",
+    "@vscursed/build": "workspace:*",
+    "cordis": "4.0.0-rc.10",
+    "zod": "^4.6.5"
+  },
+  "engines": {
+    "vscode": "^1.135.0"
+  },
+  "vscursed": {
+    "renderer": "./dist/renderer.js"
+  }
+}

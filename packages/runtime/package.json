@@ -1,0 +1,22 @@
+{
+  "name": "@vscursed/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cordis composition roots of the VSCodium realms, bundled into the patched VSCodium tree.",
+  "type": "module",
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cordisjs/plugin-loader": "1.0.0-rc.7",
+    "@vscursed/api": "workspace:*",
+    "cordis": "4.0.0-rc.10"
+  },
+  "devDependencies": {
+    "@standard-schema/spec": "^1.1.0",
+    "@vscursed/build": "workspace:*",
+    "zod": "^4.6.5"
+  }
+}

@@ -1,0 +1,14 @@
+diff --git a/src/vs/workbench/workbench.desktop.main.ts b/src/vs/workbench/workbench.desktop.main.ts
+index 9bc4dbca..23002b35 100644
+--- a/src/vs/workbench/workbench.desktop.main.ts
++++ b/src/vs/workbench/workbench.desktop.main.ts
+@@ -209,6 +209,9 @@ import './contrib/keybindingsExport/electron-browser/keybindingsExport.contribut
+ // System-wide (OS global) Keybindings
+ import './contrib/keybindings/electron-browser/systemWideKeybindings.contribution.js';
+ 
++// VSCursed renderer realm
++import '../vscursed/runtime/renderer.js';
++
+ //#endregion
+ 
+ 

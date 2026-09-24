@@ -1,0 +1,25 @@
+{
+  "name": "@vscursed/build",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vite+ pack configuration for VSCursed plugin extensions and their VSIX packaging.",
+  "bin": {
+    "vscursed": "./src/cli.ts"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@vscode/vsce": "^4.0.0",
+    "@vscursed/api": "workspace:*",
+    "cordis": "4.0.0-rc.10",
+    "rolldown": "1.2.9"
+  },
+  "peerDependencies": {
+    "vite-plus": "1.0.0-rc.0"
+  }
+}

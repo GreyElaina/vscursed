@@ -1,0 +1,25 @@
+{
+  "name": "@vscursed/workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "upstream": "node scripts/upstream.ts",
+    "dev": "node scripts/dev.ts",
+    "build": "vp run -r --concurrency-limit 1 build",
+    "typecheck": "vp run -r --concurrency-limit 1 typecheck",
+    "test": "vp test",
+    "check": "vp fmt --check && pnpm typecheck && vp test && pnpm upstream check",
+    "fmt": "vp fmt"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@vscursed/api": "workspace:*",
+    "typescript": "^6.0.2",
+    "vite-plus": "1.0.0-rc.0"
+  },
+  "engines": {
+    "node": ">=24.18"
+  },
+  "packageManager": "pnpm@12.4.1"
+}

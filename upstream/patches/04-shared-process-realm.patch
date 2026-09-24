@@ -1,0 +1,22 @@
+diff --git a/src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts b/src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts
+index 011d8d51..564445af 100644
+--- a/src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts
++++ b/src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts
+@@ -146,6 +146,7 @@ import { PlaywrightChannel } from '../../../platform/browserView/node/playwright
+ import { AgentNetworkFilterService } from '../../../platform/networkFilter/common/networkFilterService.js';
+ import { ILocalGitService } from '../../../platform/git/common/localGitService.js';
+ import { LocalGitService } from '../../../platform/git/node/localGitService.js';
++import { start as startVSCursed } from '../../../vscursed/runtime/sharedProcess.js';
+ 
+ class SharedProcessMain extends Disposable implements IClientConnectionFilter {
+ 
+@@ -195,6 +196,9 @@ class SharedProcessMain extends Disposable implements IClientConnectionFilter {
+ 			// Channels
+ 			this.initChannels(accessor);
+ 
++			// VSCursed shared process realm
++			startVSCursed(instantiationService, this.server);
++
+ 			// Error handler
+ 			this.registerErrorHandler(logService);
+ 

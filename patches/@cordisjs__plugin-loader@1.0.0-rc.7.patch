@@ -1,0 +1,21 @@
+diff --git a/lib/index.js b/lib/index.js
+index e3cc602cb32f8f4b5b1f1836f23082a56279a40e..177c5bddb7a9463631715256b0ce7171f3027d6d 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -318,11 +318,14 @@ var EntryTree = class _EntryTree {
+ 
+ // src/config/utils.ts
+ import { valueMap } from "cosmokit";
+-var evaluate = new Function("ctx", "expr", `
++// Compiled on first use: hosts that forbid string compilation (Trusted Types) can load the Loader
++// as long as no `!!js` expression is evaluated.
++var compiled;
++var evaluate = (ctx, expr) => (compiled ??= new Function("ctx", "expr", `
+   with (ctx) {
+     return eval(expr)
+   }
+-`);
++`))(ctx, expr);
+ function interpolate(ctx, value) {
+   if (isJsExpr(value)) {
+     return evaluate(ctx, value.__jsExpr);

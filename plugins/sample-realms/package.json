@@ -1,0 +1,35 @@
+{
+  "name": "sample-realms",
+  "displayName": "VSCursed Sample: Realms",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A status bar clock served by the shared process; clicking it asks every realm about itself.",
+  "categories": [
+    "Other"
+  ],
+  "license": "MIT",
+  "publisher": "vscursed",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "vp pack && vscursed vsix",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@vscursed/api": "workspace:*",
+    "@vscursed/build": "workspace:*",
+    "cordis": "4.0.0-rc.10",
+    "zod": "^4.6.5"
+  },
+  "engines": {
+    "vscode": "^1.135.0"
+  },
+  "vscursed": {
+    "renderer": "./dist/renderer.js",
+    "main": "./dist/main.js",
+    "sharedProcess": "./dist/sharedProcess.js",
+    "extensionHost": "./dist/extensionHost.js"
+  }
+}

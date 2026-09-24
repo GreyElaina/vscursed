@@ -1,0 +1,22 @@
+diff --git a/src/vs/code/electron-main/app.ts b/src/vs/code/electron-main/app.ts
+index 10a54faa..58f8ebd1 100644
+--- a/src/vs/code/electron-main/app.ts
++++ b/src/vs/code/electron-main/app.ts
+@@ -61,6 +61,7 @@ import { ProcessMainService } from '../../platform/process/electron-main/process
+ import { IKeyboardLayoutMainService, KeyboardLayoutMainService } from '../../platform/keyboardLayout/electron-main/keyboardLayoutMainService.js';
+ import { ILaunchMainService, LaunchMainService } from '../../platform/launch/electron-main/launchMainService.js';
+ import { ILifecycleMainService, LifecycleMainPhase, ShutdownReason } from '../../platform/lifecycle/electron-main/lifecycleMainService.js';
++import { start as startVSCursed } from '../../vscursed/runtime/main.js';
+ import { ILoggerService, ILogService } from '../../platform/log/common/log.js';
+ import { IMenubarMainService, MenubarMainService } from '../../platform/menubar/electron-main/menubarMainService.js';
+ import type { IOSProxyConfig } from '../../platform/native/common/native.js';
+@@ -754,6 +755,9 @@ export class CodeApplication extends Disposable {
+ 		// Init Channels
+ 		appInstantiationService.invokeFunction(accessor => this.initChannels(accessor, mainProcessElectronServer, sharedProcessClient));
+ 
++		// VSCursed main realm
++		startVSCursed(appInstantiationService, mainProcessElectronServer);
++
+ 		// Setup Protocol URL Handlers
+ 		const initialProtocolUrls = await appInstantiationService.invokeFunction(accessor => this.setupProtocolUrlHandlers(accessor, mainProcessElectronServer));
+ 

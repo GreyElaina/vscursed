@@ -1,0 +1,21 @@
+{
+  // VS Code's own compiler options: its sources join every program through `vscode-internal/*`.
+  "extends": "./upstream/vscodium/vscode/src/tsconfig.base.json",
+  "compilerOptions": {
+    // Cordis publishes declarations with extensionless relative imports, which `nodenext` rejects.
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "preserveConstEnums": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "rootDir": ".",
+    "paths": {
+      "vscode-internal/*": ["./upstream/vscodium/vscode/src/*"]
+    },
+    "typeRoots": ["./node_modules/@types", "./upstream/vscodium/vscode/node_modules/@types"],
+    "types": ["trusted-types", "wicg-file-system-access", "semver"]
+  }
+}

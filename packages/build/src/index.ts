@@ -1,4 +1,5 @@
 export { pluginPack } from './pack.ts'
+export { DevelopmentProvider } from './provider.ts'
 export { sharedModules } from './shared.ts'
 export { vscodeInternalBoundary, vscodeInternalModules } from './vscode-internal.ts'
 export { readModuleValues, vscodeSource } from './vscode-source.ts'

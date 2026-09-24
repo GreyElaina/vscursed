@@ -17,7 +17,8 @@
     "@vscode/vsce": "^4.0.0",
     "@vscursed/api": "workspace:*",
     "cordis": "4.0.0-rc.10",
-    "rolldown": "1.2.9"
+    "rolldown": "1.2.9",
+    "vscode-jsonrpc": "^9.0.0"
   },
   "peerDependencies": {
     "vite-plus": "1.0.0-rc.0"

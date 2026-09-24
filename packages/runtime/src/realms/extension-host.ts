@@ -1,6 +1,6 @@
 import type { PluginDescriptor } from '@vscursed/api'
 import type { start as Start } from 'vscode-internal/vs/vscursed/runtime/extensionHost.js'
-import { Emitter } from 'vscode-internal/vs/base/common/event.js'
+import { Emitter, type Event } from 'vscode-internal/vs/base/common/event.js'
 import { ILogService } from 'vscode-internal/vs/platform/log/common/log.js'
 import { IExtHostCommands } from 'vscode-internal/vs/workbench/api/common/extHostCommands.js'
 import { IExtHostConfiguration } from 'vscode-internal/vs/workbench/api/common/extHostConfiguration.js'
@@ -15,9 +15,11 @@ import {
   serveOverCommands,
   type CommandLink,
 } from '../vscode/commands.ts'
+import { targetRegistration, type ProviderEvent } from '../vscode/development.ts'
 import { describePlugins } from '../vscode/extensions.ts'
 import { logTo } from '../vscode/log.ts'
 import { nodeModuleHost } from '../vscode/node.ts'
+import { ProviderConnection } from '../vscode/provider-connection.ts'
 import { services } from '../vscode/services.ts'
 import { asSettings, pluginsSetting } from '../vscode/settings.ts'
 
@@ -79,11 +81,27 @@ export const start: typeof Start = instantiationService => {
     log,
     onUncleanUnload: (id, reason) => unclean.fire({ id, reason }),
   })
+
+  // In a Target window, the Debugger passed the provider registration through the extension environment.
+  const registration = targetRegistration(process.env)
+  const providerEvents = new Emitter<ProviderEvent>()
+  const provider = registration && new ProviderConnection(registration, event => providerEvents.fire(event))
+  // A subscriber first receives the current status, so the window never misses the connection's progress.
+  const onDidProvider: Event<ProviderEvent> | undefined =
+    provider &&
+    ((listener, thisArgs, disposables) => {
+      const subscription = providerEvents.event(listener, thisArgs, disposables)
+      listener.call(thisArgs, { type: 'status', status: provider.status })
+      return subscription
+    })
   serveOverCommands(
     'extensionHost',
-    new RealmServer({ realm: 'extensionHost', handle, onUncleanUnload: unclean.event }),
+    new RealmServer({ realm: 'extensionHost', handle, onDidProvider, onUncleanUnload: unclean.event }),
     link,
   )
   void link.execute(extensionHostReadyCommand)
-  extensionService.joinTermination(() => handle.dispose())
+  extensionService.joinTermination(async () => {
+    provider?.dispose()
+    await handle.dispose()
+  })
 }

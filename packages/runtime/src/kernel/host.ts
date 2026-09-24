@@ -65,7 +65,6 @@ export class PluginHost {
   private dirty = false
   private disposed = false
   private readonly overrides = new Map<string, PluginDescriptor>()
-  private readonly revisions = new Map<string, number>()
   /** Errors logged inside plugin fibers while they are being torn down. */
   private readonly teardowns = new Map<Fiber, string[]>()
 
@@ -82,7 +81,6 @@ export class PluginHost {
         this.disposed = true
         for (const subscription of subscriptions) subscription.dispose()
         this.overrides.clear()
-        this.revisions.clear()
         return this.queue
       }
     }, 'plugins.host')
@@ -116,9 +114,7 @@ export class PluginHost {
   }
 
   /** Reconciles a freshly read manifest and reloads the plugin in this realm when it remains present. */
-  reload(descriptor: PluginDescriptor, revision?: number): Promise<void> {
-    if (revision !== undefined && revision <= (this.revisions.get(descriptor.id) ?? 0)) return this.queue
-    if (revision !== undefined) this.revisions.set(descriptor.id, revision)
+  reload(descriptor: PluginDescriptor): Promise<void> {
     this.overrides.set(descriptor.id, descriptor)
     return this.enqueue(() => this.reconcile(descriptor.id), true)
   }

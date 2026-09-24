@@ -1,8 +1,10 @@
-import { BridgeError, type BridgeTransport, type PluginBuild, type PluginDescriptor, type Realm } from '@vscursed/api'
+import { BridgeError, type BridgeTransport, type PluginDescriptor, type Realm } from '@vscursed/api'
 import { Emitter, type Event } from 'vscode-internal/vs/base/common/event.js'
 import type { IChannel, IServerChannel } from 'vscode-internal/vs/base/parts/ipc/common/ipc.js'
 import type { RealmHandle } from '../kernel/realm.ts'
 import type { JsonSchema } from '../kernel/schema.ts'
+import type { DebugEndpoint, NodeDebugEndpoints } from './debug.ts'
+import type { ProviderEvent } from './development.ts'
 
 /** Name of the IPC channel that every realm serves. */
 export const channelName = 'vscursed'
@@ -25,22 +27,15 @@ export interface UncleanUnload {
   reason: string
 }
 
-export interface BuildNotification extends PluginBuild {
-  revision: number
-}
-
-export interface ReloadRequest {
-  descriptor: PluginDescriptor
-  revision?: number
-}
-
 /**
  * Commands and events of the `vscursed` channel:
  *
  * - `demand(plugins)`: a window reports the plugins it enables (main and shared process only).
+ * - `debugAcquire(extensionId)` / `debugRelease(extensionId)`: a Debugger window leases this realm's
+ *   inspector for a Target (main and shared process only); a window's leases end with its connection.
  * - `reload(plugin)`: reconciles a freshly read plugin manifest and reloads its code.
  * - `schemas()` / event `schemas`: the JSON Schemas of this realm's plugin `Config`s.
- * - event `build`: Vite+ completed a plugin build (main process only).
+ * - event `provider`: the Target's provider connection (extension host of a Target only).
  * - `call(CallRequest)` / event `event(ListenRequest)`: bridge traffic, served here or routed on.
  * - event `unclean`: a plugin whose teardown failed, so its process should restart.
  */
@@ -48,9 +43,10 @@ export interface RealmServerOptions {
   realm: Realm
   handle: RealmHandle
   demand?(client: string, plugins: PluginDescriptor[]): void
+  debug?: NodeDebugEndpoints
   /** Channels of other realms, for a realm that routes bridge traffic (the renderer). */
   route?(realm: Realm): IChannel | undefined
-  onDidBuild?: Event<BuildNotification>
+  onDidProvider?: Event<ProviderEvent>
   onUncleanUnload?: Event<UncleanUnload>
 }
 
@@ -63,11 +59,17 @@ export class RealmServer implements IServerChannel<string> {
       case 'demand':
         if (!this.options.demand) throw new BridgeError(`${realm} does not take plugin demands`)
         return this.options.demand(client, arg as PluginDescriptor[])
+      case 'debugAcquire':
+        if (!this.options.debug) throw new BridgeError(`${realm} does not provide a debug endpoint`)
+        return this.options.debug.acquire(client, arg as string) satisfies DebugEndpoint
+      case 'debugRelease':
+        if (!this.options.debug) throw new BridgeError(`${realm} does not provide a debug endpoint`)
+        return this.options.debug.release(client, arg as string)
       case 'schemas':
         await handle.ready
         return handle.modules.schemas()
       case 'reload':
-        return handle.reload((arg as ReloadRequest).descriptor, (arg as ReloadRequest).revision)
+        return handle.reload(arg as PluginDescriptor)
       case 'call': {
         const request = arg as CallRequest
         if (request.realm === realm) return (await handle.bridge).invoke(request.channel, request.method, request.args)
@@ -92,8 +94,8 @@ export class RealmServer implements IServerChannel<string> {
       }
       case 'unclean':
         return this.options.onUncleanUnload ?? (() => ({ dispose() {} }))
-      case 'build':
-        return this.options.onDidBuild ?? (() => ({ dispose() {} }))
+      case 'provider':
+        return this.options.onDidProvider ?? (() => ({ dispose() {} }))
       case 'event': {
         const request = arg as ListenRequest
         if (request.realm !== realm) return this.forward(request.realm).listen('event', request)

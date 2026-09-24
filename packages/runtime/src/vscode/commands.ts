@@ -103,6 +103,7 @@ export function channelOverCommands(side: LinkSide, link: CommandLink, initially
       ready = Promise.withResolvers<void>()
     },
     dispose() {
+      isReady = false
       fire.dispose()
       for (const { emitter } of listeners.values()) emitter.dispose()
       listeners.clear()

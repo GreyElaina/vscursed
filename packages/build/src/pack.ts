@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { readPluginManifest, type Realm } from '@vscursed/api'
 import type { UserConfig } from 'vite-plus/pack'
-import { reportBuild } from './hmr.ts'
+import { developmentProvider } from './provider.ts'
 import { sharedModules } from './shared.ts'
 import { vscodeInternalBoundary } from './vscode-internal.ts'
 
@@ -27,6 +27,7 @@ export function pluginPack(root = process.cwd()): UserConfig[] {
   const manifest = readPluginManifest(packageJson)
   if (!manifest) throw new Error(`${packageJson.name} has no "vscursed" field`)
   const id = `${packageJson.publisher}.${packageJson.name}`.toLowerCase()
+  const provider = developmentProvider(id, root, manifest)
   return (Object.entries(manifest) as [Realm, string][]).map(([realm, output]) => ({
     name: `${packageJson.name} (${realm})`,
     cwd: root,
@@ -41,7 +42,7 @@ export function pluginPack(root = process.cwd()): UserConfig[] {
     fixedExtension: false,
     deps: { alwaysBundle: [/.*/], onlyBundle: false },
     plugins: [sharedModules(), vscodeInternalBoundary()],
-    onSuccess: () => reportBuild(id, realm),
+    onSuccess: () => provider?.built(realm),
     // One file per realm: its URL carries the revision that hot replacement bumps.
     outputOptions: { codeSplitting: false },
   }))

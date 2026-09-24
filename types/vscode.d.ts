@@ -11,6 +11,7 @@
 /// <reference path="../upstream/vscodium/vscode/src/typings/vscode-globals-nls.d.ts" />
 /// <reference path="../upstream/vscodium/vscode/src/typings/vscode-globals-product.d.ts" />
 /// <reference path="../upstream/vscodium/vscode/src/typings/vscode-globals-ttp.d.ts" />
+/// <reference path="../upstream/vscodium/vscode/src/vs/monaco.d.ts" />
 /// <reference path="../upstream/vscodium/vscode/src/vscode-dts/vscode.d.ts" />
 /// <reference path="../upstream/vscodium/vscode/src/vs/workbench/contrib/debug/common/debugProtocol.d.ts" />
 /// <reference path="../upstream/vscodium/vscode/src/vscode-dts/vscode.proposed.activeComment.d.ts" />

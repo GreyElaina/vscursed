@@ -28,6 +28,8 @@ export interface RealmOptions {
   plugins: PluginSource
   settings: SettingsSource
   log(level: LogLevel, message: string): void
+  /** Installs realm-specific integrations inside the kernel fiber after its services are ready. */
+  contribute?(ctx: Context): void
   /** A removed plugin was not torn down cleanly; see `PluginHostOptions.onUncleanUnload`. */
   onUncleanUnload?(id: string, reason: string): void
 }
@@ -39,7 +41,7 @@ export interface RealmHandle {
   readonly bridge: Promise<Bridge>
   /** Resolves once the first reconciliation has loaded the enabled plugins. */
   readonly ready: Promise<void>
-  reload(descriptor: PluginDescriptor, revision?: number): Promise<void>
+  reload(descriptor: PluginDescriptor): Promise<void>
   dispose(): Promise<void>
 }
 
@@ -77,6 +79,13 @@ export function startRealm(options: RealmOptions): RealmHandle {
         ctx.plugin(Bridge, { realm: options.realm, transport: options.transport }),
         ctx.plugin(PluginLoader, { modules }),
       ])
+      if (options.contribute) {
+        await ctx.plugin({
+          name: `${options.realm}.contribution`,
+          inject: ['interceptor'],
+          apply: options.contribute,
+        })
+      }
       bridge.resolve(ctx.get('bridge')!)
       const loader = ctx.get('loader') as PluginLoader
       const host = new PluginHost(ctx, { ...options, loader, modules })
@@ -94,9 +103,9 @@ export function startRealm(options: RealmOptions): RealmHandle {
     modules,
     bridge: bridge.promise,
     ready: ready.promise,
-    async reload(descriptor, revision) {
+    async reload(descriptor) {
       await ready.promise
-      await (await pluginHost.promise).reload(descriptor, revision)
+      await (await pluginHost.promise).reload(descriptor)
     },
     async dispose() {
       await kernel.dispose()

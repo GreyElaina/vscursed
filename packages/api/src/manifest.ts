@@ -1,5 +1,5 @@
 import { z } from 'zod/mini'
-import { realms, type Realm } from './realm.ts'
+import { realms } from './realm.ts'
 
 const modulePath = z
   .string()
@@ -20,15 +20,6 @@ export const PluginManifest = z
 
 export type PluginManifest = z.infer<typeof PluginManifest>
 
-/** Socket inherited by Vite+ watch processes for reporting successful plugin builds. */
-export const hmrSocketEnv = 'VSCURSED_HMR_SOCKET'
-
-/** A realm bundle that Vite+ has successfully rebuilt. */
-export interface PluginBuild {
-  id: string
-  realm: Realm
-}
-
 /** An enabled extension that carries a Cordis plugin, as seen by one realm. */
 export interface PluginDescriptor {
   /** Extension identifier in lower case, also the Loader entry id and the `vscursed.plugins` key. */
@@ -44,14 +35,25 @@ export class ManifestError extends Error {
   override name = 'ManifestError'
 }
 
+export type PluginManifestResult =
+  | { success: true; data: PluginManifest | undefined }
+  | { success: false; error: ManifestError }
+
+/** Validates the `vscursed` field without throwing, for status-reporting boundaries. */
+export function parsePluginManifest(packageJson: object): PluginManifestResult {
+  const field = 'vscursed' in packageJson ? packageJson.vscursed : undefined
+  if (field === undefined) return { success: true, data: undefined }
+  const result = PluginManifest.safeParse(field)
+  if (!result.success) return { success: false, error: new ManifestError(z.prettifyError(result.error)) }
+  return { success: true, data: result.data }
+}
+
 /**
  * Reads the `vscursed` field of an extension manifest. Returns `undefined` for an extension without
  * Cordis plugins and throws a {@link ManifestError} for a malformed field.
  */
-export function readPluginManifest(packageJson: { vscursed?: unknown }): PluginManifest | undefined {
-  const field = packageJson.vscursed
-  if (field === undefined) return
-  const result = PluginManifest.safeParse(field)
-  if (!result.success) throw new ManifestError(z.prettifyError(result.error))
+export function readPluginManifest(packageJson: object): PluginManifest | undefined {
+  const result = parsePluginManifest(packageJson)
+  if (!result.success) throw result.error
   return result.data
 }

@@ -4,9 +4,9 @@ import type { IInstantiationService } from 'vscode-internal/vs/platform/instanti
 import { ILogService } from 'vscode-internal/vs/platform/log/common/log.js'
 import { startRealm } from '../kernel/realm.ts'
 import { channelName, channelTransport, RealmServer } from './channel.ts'
+import { NodeDebugEndpoints } from './debug.ts'
 import { WindowDemand } from './demand.ts'
 import { logTo } from './log.ts'
-import { BuildNotifications } from './hmr.ts'
 import { nodeModuleHost } from './node.ts'
 import { services } from './services.ts'
 import { configurationSettings } from './settings.ts'
@@ -25,7 +25,7 @@ export function startApplicationRealm(
     accessor.get(ILogService),
   ])
   const demand = new WindowDemand(realm)
-  const builds = realm === 'main' ? new BuildNotifications(logService) : undefined
+  const debug = new NodeDebugEndpoints()
   const handle = startRealm({
     realm,
     instantiationService,
@@ -42,14 +42,17 @@ export function startApplicationRealm(
       realm,
       handle,
       demand: (client, plugins) => demand.set(client, plugins),
-      onDidBuild: builds?.onDidBuild,
+      debug,
     }),
   )
-  server.onDidRemoveConnection(connection => demand.delete(connection.ctx))
+  server.onDidRemoveConnection(connection => {
+    demand.delete(connection.ctx)
+    debug.releaseClient(connection.ctx)
+  })
   return {
     ...handle,
     async dispose() {
-      builds?.dispose()
+      debug.dispose()
       await handle.dispose()
     },
   }

@@ -1,4 +1,4 @@
-import { readPluginManifest, realms, type PluginDescriptor, type Realm } from '@vscursed/api'
+import { readPluginManifest, realms, type PluginDescriptor, type PluginManifest, type Realm } from '@vscursed/api'
 import { Emitter } from 'vscode-internal/vs/base/common/event.js'
 import { Disposable } from 'vscode-internal/vs/base/common/lifecycle.js'
 import { joinPath } from 'vscode-internal/vs/base/common/resources.js'
@@ -7,6 +7,12 @@ import type { IChannel } from 'vscode-internal/vs/base/parts/ipc/common/ipc.js'
 import { MenuId, MenuRegistry } from 'vscode-internal/vs/platform/actions/common/actions.js'
 import { CommandsRegistry, ICommandService } from 'vscode-internal/vs/platform/commands/common/commands.js'
 import { IConfigurationService } from 'vscode-internal/vs/platform/configuration/common/configuration.js'
+import {
+  ContextKeyExpr,
+  type IContextKey,
+  IContextKeyService,
+  RawContextKey,
+} from 'vscode-internal/vs/platform/contextkey/common/contextkey.js'
 import { IFileService } from 'vscode-internal/vs/platform/files/common/files.js'
 import { IInstantiationService } from 'vscode-internal/vs/platform/instantiation/common/instantiation.js'
 import { IMainProcessService } from 'vscode-internal/vs/platform/ipc/common/mainProcessService.js'
@@ -15,6 +21,7 @@ import { ILogService } from 'vscode-internal/vs/platform/log/common/log.js'
 import { INotificationService, Severity } from 'vscode-internal/vs/platform/notification/common/notification.js'
 import { IQuickInputService, type IQuickPickItem } from 'vscode-internal/vs/platform/quickinput/common/quickInput.js'
 import { registerWorkbenchContribution2, WorkbenchPhase } from 'vscode-internal/vs/workbench/common/contributions.js'
+import { IWorkbenchEnvironmentService } from 'vscode-internal/vs/workbench/services/environment/common/environmentService.js'
 import { IWorkbenchExtensionManagementService } from 'vscode-internal/vs/workbench/services/extensionManagement/common/extensionManagement.js'
 import { IExtensionService } from 'vscode-internal/vs/workbench/services/extensions/common/extensions.js'
 import { IHostService } from 'vscode-internal/vs/workbench/services/host/browser/host.js'
@@ -23,27 +30,33 @@ import { samePluginDescriptors, sameRealmPlugins } from '../kernel/descriptors.t
 import type { PluginSource } from '../kernel/host.ts'
 import { startRealm } from '../kernel/realm.ts'
 import type { JsonSchema } from '../kernel/schema.ts'
-import {
-  channelName,
-  channelTransport,
-  RealmServer,
-  type BuildNotification,
-  type ReloadRequest,
-  type UncleanUnload,
-} from '../vscode/channel.ts'
+import { channelName, channelTransport, RealmServer, type UncleanUnload } from '../vscode/channel.ts'
 import {
   channelOverCommands,
   extensionHostReadyCommand,
   serveOverCommands,
   type CommandLink,
 } from '../vscode/commands.ts'
+import { targetRegistration } from '../vscode/development.ts'
 import { describePlugins } from '../vscode/extensions.ts'
 import { logTo } from '../vscode/log.ts'
 import { rendererModuleHost } from '../vscode/renderer/files.ts'
+import { DevelopmentDebugger } from '../vscode/renderer/debugger.ts'
+import { contributeExtensionsList } from '../vscode/renderer/extensions-list.ts'
 import { InstallProbe } from '../vscode/renderer/probe.ts'
 import { SettingsSchema } from '../vscode/renderer/settings-schema.ts'
+import { DevelopmentTarget } from '../vscode/renderer/target.ts'
 import { services } from '../vscode/services.ts'
 import { configurationSettings } from '../vscode/settings.ts'
+
+const vscursedExtensionsContext = new RawContextKey<Record<string, boolean>>('vscursed.extensions', {})
+const vscursedRealmContexts: Record<Realm, RawContextKey<Record<string, boolean>>> = {
+  renderer: new RawContextKey('vscursed.rendererExtensions', {}),
+  main: new RawContextKey('vscursed.mainExtensions', {}),
+  sharedProcess: new RawContextKey('vscursed.sharedProcessExtensions', {}),
+  extensionHost: new RawContextKey('vscursed.extensionHostExtensions', {}),
+}
+const vscursedExtensionMenu = new MenuId('vscursed.extension')
 
 /**
  * The window's realm and its hub: it follows the window's extension enablement, reports the enabled
@@ -57,6 +70,7 @@ class VSCursedContribution extends Disposable {
     @IInstantiationService instantiationService: IInstantiationService,
     @IExtensionService extensionService: IExtensionService,
     @ICommandService commandService: ICommandService,
+    @IContextKeyService contextKeyService: IContextKeyService,
     @IMainProcessService mainProcessService: IMainProcessService,
     @ISharedProcessService sharedProcessService: ISharedProcessService,
     @IConfigurationService configurationService: IConfigurationService,
@@ -64,6 +78,7 @@ class VSCursedContribution extends Disposable {
     @IQuickInputService quickInputService: IQuickInputService,
     @INotificationService notificationService: INotificationService,
     @IHostService hostService: IHostService,
+    @IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
     @IWorkbenchExtensionManagementService extensionManagementService: IWorkbenchExtensionManagementService,
     @ILifecycleService lifecycleService: ILifecycleService,
     @ILogService logService: ILogService,
@@ -87,6 +102,10 @@ class VSCursedContribution extends Disposable {
     const route = (realm: Realm) => channels[realm]
 
     const schema = this._register(new SettingsSchema())
+    const vscursedExtensions = vscursedExtensionsContext.bindTo(contextKeyService)
+    const vscursedRealms = Object.fromEntries(
+      realms.map(realm => [realm, vscursedRealmContexts[realm].bindTo(contextKeyService)]),
+    ) as Record<Realm, IContextKey<Record<string, boolean>>>
     let registryDescriptors: PluginDescriptor[] = []
     let descriptors: PluginDescriptor[] = []
     const demands: Partial<Record<'main' | 'sharedProcess', PluginDescriptor[]>> = {}
@@ -94,11 +113,22 @@ class VSCursedContribution extends Disposable {
     const pluginChanges = this._register(new Emitter<void>())
     const plugins: PluginSource = { current: () => descriptors, onDidChange: listener => pluginChanges.event(listener) }
     const currentDescriptors = () => registryDescriptors.map(descriptor => overrides.get(descriptor.id) ?? descriptor)
+    const updateExtensionContexts = () => {
+      vscursedExtensions.set(Object.fromEntries(descriptors.map(descriptor => [descriptor.id, true])))
+      for (const realm of realms) {
+        vscursedRealms[realm].set(
+          Object.fromEntries(
+            descriptors.filter(descriptor => descriptor.manifest[realm]).map(descriptor => [descriptor.id, true]),
+          ),
+        )
+      }
+    }
     const publishPlugins = () => {
       const next = currentDescriptors()
       if (samePluginDescriptors(descriptors, next)) return
       const rendererChanged = !sameRealmPlugins(descriptors, next, 'renderer')
       descriptors = next
+      updateExtensionContexts()
       schema.setPlugins(descriptors)
       for (const realm of ['main', 'sharedProcess'] as const) {
         if (samePluginDescriptors(demands[realm] ?? [], descriptors, realm)) continue
@@ -117,7 +147,7 @@ class VSCursedContribution extends Disposable {
       }
       publishPlugins()
     }
-    void extensionService.whenInstalledExtensionsRegistered().then(() => {
+    const registered = extensionService.whenInstalledExtensionsRegistered().then(() => {
       this._register(extensionService.onDidChangeExtensions(readPlugins))
       readPlugins()
     })
@@ -131,6 +161,7 @@ class VSCursedContribution extends Disposable {
       plugins,
       settings: configurationSettings(configurationService),
       log,
+      contribute: contributeExtensionsList,
       onUncleanUnload: (id, reason) =>
         notificationService.prompt(
           Severity.Warning,
@@ -139,10 +170,29 @@ class VSCursedContribution extends Disposable {
         ),
     })
 
-    const reloadRealm = async (descriptor: PluginDescriptor, realm: Realm, revision?: number) => {
-      if (realm === 'renderer') return handle.reload(descriptor, revision)
-      const request: ReloadRequest = { descriptor, revision }
-      await channels[realm]!.call('reload', request)
+    const reloadRealm = async (descriptor: PluginDescriptor, realm: Realm) => {
+      if (realm === 'renderer') return handle.reload(descriptor)
+      await channels[realm]!.call('reload', descriptor)
+    }
+    const reloadPluginRealm = async (id: string, realm: Realm) => {
+      const descriptor = descriptors.find(descriptor => descriptor.id === id)
+      if (!descriptor) throw new Error(`VSCursed plugin ${id} is not enabled in this window`)
+      await reloadRealm(descriptor, realm)
+    }
+    const applyManifest = async (id: string, manifest: PluginManifest, details: Partial<PluginDescriptor> = {}) => {
+      const installed = registryDescriptors.find(descriptor => descriptor.id === id)
+      const current = descriptors.find(descriptor => descriptor.id === id)
+      if (!installed || !current) throw new Error(`VSCursed plugin ${id} is not enabled in this window`)
+      const descriptor: PluginDescriptor = { ...installed, ...details, manifest }
+      overrides.set(id, descriptor)
+      const affected = realms.filter(realm => current.manifest[realm] || manifest[realm])
+      await Promise.all(affected.map(realm => reloadRealm(descriptor, realm)))
+      descriptors = currentDescriptors()
+      updateExtensionContexts()
+      schema.setPlugins(descriptors)
+      for (const realm of ['main', 'sharedProcess'] as const) {
+        if (affected.includes(realm)) demands[realm] = descriptors
+      }
     }
     const reloadManifest = async (id: string) => {
       const current = registryDescriptors.find(descriptor => descriptor.id === id)
@@ -152,26 +202,7 @@ class VSCursedContribution extends Disposable {
       )
       const manifest = readPluginManifest(packageJson)
       if (!manifest) throw new Error(`${id} has no "vscursed" field`)
-      const descriptor: PluginDescriptor = {
-        ...current,
-        manifest,
-        displayName: packageJson.displayName,
-        description: packageJson.description,
-      }
-      overrides.set(id, descriptor)
-      const previous = descriptors.find(descriptor => descriptor.id === id) ?? current
-      const affected = realms.filter(realm => previous.manifest[realm] || descriptor.manifest[realm])
-      await Promise.all(affected.map(realm => reloadRealm(descriptor, realm)))
-      descriptors = currentDescriptors()
-      schema.setPlugins(descriptors)
-      for (const realm of ['main', 'sharedProcess'] as const) {
-        if (affected.includes(realm)) demands[realm] = descriptors
-      }
-    }
-    const reloadBuild = async ({ id, realm, revision }: BuildNotification) => {
-      const descriptor = descriptors.find(descriptor => descriptor.id === id)
-      if (!descriptor) throw new Error(`VSCursed plugin ${id} is not enabled in this window`)
-      await reloadRealm(descriptor, realm, revision)
+      await applyManifest(id, manifest, { displayName: packageJson.displayName, description: packageJson.description })
     }
 
     interface PluginPick extends IQuickPickItem {
@@ -200,33 +231,60 @@ class VSCursedContribution extends Disposable {
         command: { id: reloadCommand, title: 'Reload Plugin', category: 'VSCursed' },
       }),
     )
-
-    const buildTimers = new Map<string, { build: BuildNotification; timer: ReturnType<typeof setTimeout> }>()
-    this._register({
-      dispose: () => {
-        for (const { timer } of buildTimers.values()) clearTimeout(timer)
-        buildTimers.clear()
-      },
-    })
     this._register(
-      channels.main!.listen<BuildNotification>('build')(build => {
-        const { id, realm } = build
-        if (!registryDescriptors.some(descriptor => descriptor.id === id)) return
-        const key = `${id}:${realm}`
-        clearTimeout(buildTimers.get(key)?.timer)
-        buildTimers.set(key, {
-          build,
-          timer: setTimeout(() => {
-            const pending = buildTimers.get(key)
-            buildTimers.delete(key)
-            if (!pending) return
-            void reloadBuild(pending.build).catch(error =>
-              log('error', `cannot reload ${id} in the ${realm} realm after its Vite+ build: ${error}`),
-            )
-          }, 150),
-        })
+      MenuRegistry.appendMenuItem(vscursedExtensionMenu, {
+        command: { id: reloadCommand, title: 'Reload Manifest' },
+        when: ContextKeyExpr.in('extension', vscursedExtensionsContext.key),
+        group: '1_manifest',
       }),
     )
+
+    this._register(
+      MenuRegistry.appendMenuItem(MenuId.ExtensionContext, {
+        submenu: vscursedExtensionMenu,
+        title: 'VSCursed',
+        when: ContextKeyExpr.in('extension', vscursedExtensionsContext.key),
+        group: '4_configure',
+      }),
+    )
+    for (const realm of realms) {
+      const reloadRealmCommand = `vscursed.reloadRealm.${realm}`
+      this._register(
+        CommandsRegistry.registerCommand(reloadRealmCommand, async (_accessor, requested?: unknown) => {
+          const id = typeof requested === 'string' ? requested.toLowerCase() : undefined
+          if (!id) throw new Error('Reload Realm requires an extension identifier')
+          await reloadPluginRealm(id, realm)
+        }),
+      )
+      this._register(
+        MenuRegistry.appendMenuItem(vscursedExtensionMenu, {
+          command: { id: reloadRealmCommand, title: `Reload ${realm}` },
+          when: ContextKeyExpr.in('extension', vscursedRealmContexts[realm].key),
+          group: '2_realms',
+        }),
+      )
+    }
+
+    // A Target window runs one extension from its provider workspace; every other window can debug Targets.
+    const registration = targetRegistration(environmentService.debugExtensionHost.env)
+    if (registration) {
+      this._register(
+        instantiationService.createInstance(DevelopmentTarget, registration, extensionHost, {
+          applyManifest: async (id, manifest) => {
+            await registered
+            await applyManifest(id, manifest)
+          },
+          reloadRealm: reloadPluginRealm,
+        }),
+      )
+    } else {
+      this._register(
+        instantiationService.createInstance(DevelopmentDebugger, {
+          main: channels.main!,
+          sharedProcess: channels.sharedProcess!,
+        }),
+      )
+    }
 
     this._register(handle.modules.onDidChangeSchema(() => schema.report('renderer', handle.modules.schemas())))
     for (const realm of ['main', 'sharedProcess', 'extensionHost'] as const) {

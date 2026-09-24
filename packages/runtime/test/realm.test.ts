@@ -102,28 +102,6 @@ describe('startRealm', () => {
     expect(events).toEqual(['v0 apply first', 'v0 dispose first', 'v1 apply first'])
   })
 
-  it('reloads each Vite+ build revision once', async () => {
-    const events: string[] = []
-    const modules: Record<string, unknown> = {
-      [url]: clockModule(events, 'v0'),
-      [`${url}?revision=1`]: clockModule(events, 'v1'),
-      [`${url}?revision=2`]: clockModule(events, 'v2'),
-    }
-    const { handle } = start(modules)
-    await handle.ready
-
-    await handle.reload(descriptor, 7)
-    await handle.reload(descriptor, 7)
-    await handle.reload(descriptor, 8)
-    expect(events).toEqual([
-      'v0 apply first',
-      'v0 dispose first',
-      'v1 apply first',
-      'v1 dispose first',
-      'v2 apply first',
-    ])
-  })
-
   it('unloads a realm removed from a reloaded manifest', async () => {
     const events: string[] = []
     const { handle } = start({ [url]: clockModule(events, 'v0') })

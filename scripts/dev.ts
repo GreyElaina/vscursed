@@ -7,16 +7,15 @@
  *   pnpm dev [-- <VSCodium arguments>]
  */
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { hmrSocketEnv } from '@vscursed/api'
 import { applyPatches, limited, npm, vscodeRoot, workspaceRoot } from './lib/upstream.ts'
 
 const profile = join(workspaceRoot, '.vscursed')
-const hmrSocket = process.platform === 'win32' ? `\\\\.\\pipe\\vscursed-${process.pid}` : join(profile, 'hmr.sock')
-mkdirSync(profile, { recursive: true })
 /** Memory ceiling of the VSCodium process tree. */
 const electronMemory = process.env.VSCURSED_ELECTRON_MEMORY ?? '4G'
+const launchArguments = process.argv.slice(2).filter(arg => arg !== '--')
+const hasArgument = (name: string) => launchArguments.some(arg => arg === name || arg.startsWith(`${name}=`))
 
 if (!existsSync(join(vscodeRoot, 'out/main.js'))) {
   console.error('vscursed: the VSCodium tree is not prepared; run `pnpm upstream prepare` once.')
@@ -49,13 +48,23 @@ function watch(dir: string, configs: number) {
 }
 
 const watchers = [watch(join(workspaceRoot, 'packages/runtime'), 4)]
+let stopped = false
 const stop = () => {
+  if (stopped) return
+  stopped = true
   for (const { child } of watchers) {
     if (child.exitCode === null && child.pid) process.kill(-child.pid)
   }
 }
-process.once('SIGINT', stop)
-process.once('SIGTERM', stop)
+process.once('exit', stop)
+process.once('SIGINT', () => {
+  stop()
+  process.exit(130)
+})
+process.once('SIGTERM', () => {
+  stop()
+  process.exit(143)
+})
 await Promise.all(watchers.map(({ ready }) => ready))
 
 /**
@@ -79,12 +88,12 @@ try {
   await limited(
     join(vscodeRoot, 'scripts/code.sh'),
     [
-      `--user-data-dir=${join(profile, 'user-data')}`,
-      `--extensions-dir=${join(profile, 'extensions')}`,
+      ...(hasArgument('--user-data-dir') ? [] : [`--user-data-dir=${join(profile, 'user-data')}`]),
+      ...(hasArgument('--extensions-dir') ? [] : [`--extensions-dir=${join(profile, 'extensions')}`]),
       ...sandboxArguments(),
-      ...process.argv.slice(2).filter(arg => arg !== '--'),
+      ...launchArguments,
     ],
-    { cwd: vscodeRoot, env: { ...process.env, [hmrSocketEnv]: hmrSocket }, memory: electronMemory },
+    { cwd: vscodeRoot, memory: electronMemory },
   )
 } finally {
   stop()

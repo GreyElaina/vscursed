@@ -104,11 +104,6 @@ pnpm check               # oxfmt 检查、类型检查、单元测试、补丁�
 pnpm fmt
 ```
 
-启动后通过命令面板的 `Developer: Install Extension from Location...` 按需安装插件工作区，随后在 Extensions
-界面控制启停。需要 HMR 的插件在 VSCodium 集成终端中单独运行 `pnpm exec vp pack --watch`；Vite+ 每次成功
-构建后，成功完成构建的运行域会热替换插件，并保留当前配置。修改 `package.json` 中的 `vscursed` 清单后，
-运行 `VSCursed: Reload Plugin` 重新读取清单并协调各个运行域。
-
 修改 VSCodium 源码：
 
 ```sh

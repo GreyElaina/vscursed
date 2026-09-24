@@ -5,6 +5,7 @@ import {
   sharedModulesKey,
   VSCode,
   type BridgeTransport,
+  type PluginDescriptor,
   type Realm,
   type ServiceRegistry,
   type SharedModules,
@@ -12,7 +13,7 @@ import {
 import * as cordis from 'cordis'
 import { Context, Logger, type Exporter } from 'cordis'
 import type { IInstantiationService } from 'vscode-internal/vs/platform/instantiation/common/instantiation.js'
-import { PluginHost, type FileWatcher, type PluginSource, type SettingsSource } from './host.ts'
+import { PluginHost, type PluginSource, type SettingsSource } from './host.ts'
 import { PluginLoader } from './loader.ts'
 import { PluginModules, type ModuleHost } from './modules.ts'
 
@@ -26,7 +27,6 @@ export interface RealmOptions {
   modules: ModuleHost
   plugins: PluginSource
   settings: SettingsSource
-  watcher?: FileWatcher
   log(level: LogLevel, message: string): void
   /** A removed plugin was not torn down cleanly; see `PluginHostOptions.onUncleanUnload`. */
   onUncleanUnload?(id: string, reason: string): void
@@ -39,6 +39,7 @@ export interface RealmHandle {
   readonly bridge: Promise<Bridge>
   /** Resolves once the first reconciliation has loaded the enabled plugins. */
   readonly ready: Promise<void>
+  reload(descriptor: PluginDescriptor, revision?: number): Promise<void>
   dispose(): Promise<void>
 }
 
@@ -64,6 +65,7 @@ export function startRealm(options: RealmOptions): RealmHandle {
   exportLogs(root, options.log)
   const modules = new PluginModules(options.realm, options.modules)
   const bridge = Promise.withResolvers<Bridge>()
+  const pluginHost = Promise.withResolvers<PluginHost>()
   const ready = Promise.withResolvers<void>()
 
   const kernel = root.plugin({
@@ -78,18 +80,24 @@ export function startRealm(options: RealmOptions): RealmHandle {
       bridge.resolve(ctx.get('bridge')!)
       const loader = ctx.get('loader') as PluginLoader
       const host = new PluginHost(ctx, { ...options, loader, modules })
+      pluginHost.resolve(host)
       void host
-        .schedule()
+        .initialize()
         .then(() => loader.await())
-        .finally(ready.resolve)
+        .then(ready.resolve, ready.reject)
     },
   })
+  void kernel.then(undefined, ready.reject)
 
   return {
     ctx: root,
     modules,
     bridge: bridge.promise,
     ready: ready.promise,
+    async reload(descriptor, revision) {
+      await ready.promise
+      await (await pluginHost.promise).reload(descriptor, revision)
+    },
     async dispose() {
       await kernel.dispose()
       Reflect.deleteProperty(globalThis, sharedModulesKey)

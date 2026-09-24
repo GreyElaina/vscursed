@@ -1,7 +1,7 @@
 import type { PluginDescriptor } from '@vscursed/api'
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
 import { z } from 'zod'
-import type { FileWatcher, PluginSource, SettingsSource } from '../src/kernel/host.ts'
+import type { PluginSource, SettingsSource } from '../src/kernel/host.ts'
 import { startRealm, type RealmHandle } from '../src/kernel/realm.ts'
 
 function source<T>(initial: T) {
@@ -24,7 +24,6 @@ const descriptor: PluginDescriptor = {
   id: 'test.clock',
   location: '/extensions/clock',
   manifest: { renderer: './dist/renderer.js' },
-  development: true,
 }
 
 /** A plugin module whose lifecycle is recorded in `events`. */
@@ -49,13 +48,6 @@ describe('startRealm', () => {
   function start(modules: Record<string, unknown>, onUncleanUnload?: (id: string, reason: string) => void) {
     const plugins = source<readonly PluginDescriptor[]>([descriptor])
     const settings = source<Readonly<Record<string, unknown>>>({ 'test.clock': { label: 'first' } })
-    const watches = new Map<string, () => void>()
-    const watcher: FileWatcher = {
-      watch(path, onChange) {
-        watches.set(path, onChange)
-        return { dispose: () => void watches.delete(path) }
-      },
-    }
     const logs: string[] = []
     handle = startRealm({
       realm: 'renderer',
@@ -71,11 +63,10 @@ describe('startRealm', () => {
       },
       plugins: plugins as PluginSource,
       settings: settings as SettingsSource,
-      watcher,
       log: (level, message) => logs.push(`${level} ${message}`),
       onUncleanUnload,
     })
-    return { plugins, settings, watches, logs, handle }
+    return { plugins, settings, logs, handle }
   }
 
   const url = 'memory:/extensions/clock/dist/renderer.js'
@@ -101,14 +92,57 @@ describe('startRealm', () => {
     expect(events).toEqual(['v0 apply first'])
   })
 
-  it('replaces the module of a development plugin and keeps its config', async () => {
+  it('replaces a changed plugin module and keeps its config', async () => {
     const events: string[] = []
     const modules: Record<string, unknown> = { [url]: clockModule(events, 'v0') }
-    const { watches, handle } = start(modules)
+    const { handle } = start(modules)
     await handle.ready
     modules[`${url}?revision=1`] = clockModule(events, 'v1')
-    watches.get('/extensions/clock/dist/renderer.js')!()
-    await vi.waitFor(() => expect(events).toEqual(['v0 apply first', 'v0 dispose first', 'v1 apply first']))
+    await handle.reload(descriptor)
+    expect(events).toEqual(['v0 apply first', 'v0 dispose first', 'v1 apply first'])
+  })
+
+  it('reloads each Vite+ build revision once', async () => {
+    const events: string[] = []
+    const modules: Record<string, unknown> = {
+      [url]: clockModule(events, 'v0'),
+      [`${url}?revision=1`]: clockModule(events, 'v1'),
+      [`${url}?revision=2`]: clockModule(events, 'v2'),
+    }
+    const { handle } = start(modules)
+    await handle.ready
+
+    await handle.reload(descriptor, 7)
+    await handle.reload(descriptor, 7)
+    await handle.reload(descriptor, 8)
+    expect(events).toEqual([
+      'v0 apply first',
+      'v0 dispose first',
+      'v1 apply first',
+      'v1 dispose first',
+      'v2 apply first',
+    ])
+  })
+
+  it('unloads a realm removed from a reloaded manifest', async () => {
+    const events: string[] = []
+    const { handle } = start({ [url]: clockModule(events, 'v0') })
+    await handle.ready
+    await handle.reload({ ...descriptor, manifest: { main: './dist/main.js' } })
+    expect(events).toEqual(['v0 apply first', 'v0 dispose first'])
+  })
+
+  it('moves the module when a reloaded manifest changes its path', async () => {
+    const events: string[] = []
+    const movedUrl = 'memory:/extensions/clock/dist/renderer-next.js?revision=1'
+    const { handle } = start({
+      [url]: clockModule(events, 'v0'),
+      [movedUrl]: clockModule(events, 'v1'),
+    })
+    await handle.ready
+
+    await handle.reload({ ...descriptor, manifest: { renderer: './dist/renderer-next.js' } })
+    expect(events).toEqual(['v0 apply first', 'v0 dispose first', 'v1 apply first'])
   })
 
   it('reports Config schemas and unloads disabled plugins', async () => {

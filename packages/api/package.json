@@ -10,6 +10,9 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
   },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
   "devDependencies": {
     "cordis": "4.0.0-rc.10"
   },

@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { readPluginManifest } from '@vscursed/api'
+import { readPluginManifest, type Realm } from '@vscursed/api'
 import type { UserConfig } from 'vite-plus/pack'
+import { reportBuild } from './hmr.ts'
 import { sharedModules } from './shared.ts'
 import { vscodeInternalBoundary } from './vscode-internal.ts'
 
@@ -20,9 +21,13 @@ function sourceOf(root: string, output: string) {
  */
 export function pluginPack(root = process.cwd()): UserConfig[] {
   const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  if (typeof packageJson.publisher !== 'string' || typeof packageJson.name !== 'string') {
+    throw new Error('a VSCursed plugin requires string "publisher" and "name" fields')
+  }
   const manifest = readPluginManifest(packageJson)
   if (!manifest) throw new Error(`${packageJson.name} has no "vscursed" field`)
-  return Object.entries(manifest).map(([realm, output]) => ({
+  const id = `${packageJson.publisher}.${packageJson.name}`.toLowerCase()
+  return (Object.entries(manifest) as [Realm, string][]).map(([realm, output]) => ({
     name: `${packageJson.name} (${realm})`,
     cwd: root,
     entry: { [basename(output, '.js')]: sourceOf(root, output) },
@@ -36,6 +41,7 @@ export function pluginPack(root = process.cwd()): UserConfig[] {
     fixedExtension: false,
     deps: { alwaysBundle: [/.*/], onlyBundle: false },
     plugins: [sharedModules(), vscodeInternalBoundary()],
+    onSuccess: () => reportBuild(id, realm),
     // One file per realm: its URL carries the revision that hot replacement bumps.
     outputOptions: { codeSplitting: false },
   }))

@@ -17,7 +17,6 @@ export function describePlugin(extension: IExtensionDescription): PluginDescript
     id: ExtensionIdentifier.toKey(extension.identifier),
     location: extension.extensionLocation.fsPath,
     manifest,
-    development: extension.isUnderDevelopment,
     displayName: extension.displayName,
     description: extension.description,
   }

@@ -6,7 +6,8 @@ import { startRealm } from '../kernel/realm.ts'
 import { channelName, channelTransport, RealmServer } from './channel.ts'
 import { WindowDemand } from './demand.ts'
 import { logTo } from './log.ts'
-import { nodeModuleHost, nodeWatcher } from './node.ts'
+import { BuildNotifications } from './hmr.ts'
+import { nodeModuleHost } from './node.ts'
 import { services } from './services.ts'
 import { configurationSettings } from './settings.ts'
 
@@ -23,7 +24,8 @@ export function startApplicationRealm(
     accessor.get(IConfigurationService),
     accessor.get(ILogService),
   ])
-  const demand = new WindowDemand()
+  const demand = new WindowDemand(realm)
+  const builds = realm === 'main' ? new BuildNotifications(logService) : undefined
   const handle = startRealm({
     realm,
     instantiationService,
@@ -32,13 +34,23 @@ export function startApplicationRealm(
     modules: nodeModuleHost,
     plugins: demand,
     settings: configurationSettings(configurationService),
-    watcher: nodeWatcher,
     log: logTo(logService),
   })
   server.registerChannel(
     channelName,
-    new RealmServer({ realm, handle, demand: (client, plugins) => demand.set(client, plugins) }),
+    new RealmServer({
+      realm,
+      handle,
+      demand: (client, plugins) => demand.set(client, plugins),
+      onDidBuild: builds?.onDidBuild,
+    }),
   )
   server.onDidRemoveConnection(connection => demand.delete(connection.ctx))
-  return handle
+  return {
+    ...handle,
+    async dispose() {
+      builds?.dispose()
+      await handle.dispose()
+    },
+  }
 }

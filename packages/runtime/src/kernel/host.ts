@@ -16,28 +16,20 @@ export interface SettingsSource {
   onDidChange(listener: () => void): Disposable
 }
 
-export interface FileWatcher {
-  watch(path: string, onChange: () => void): Disposable
-}
-
 export interface PluginHostOptions {
   realm: Realm
   loader: PluginLoader
   modules: PluginModules
   plugins: PluginSource
   settings: SettingsSource
-  /** Watches development plugins for hot replacement; absent in realms that cannot watch files. */
-  watcher?: FileWatcher
   /**
-   * A removed plugin's teardown logged an error or did not finish; whatever it installed may still be
-   * in place, and only restarting the process is certain to remove it.
+   * A plugin's teardown logged an error or did not finish; whatever it installed may still be in
+   * place, and only restarting the process is certain to remove it.
    */
   onUncleanUnload?(id: string, reason: string): void
 }
 
-/** Quiet period after a file change, so that a bundler finishing its writes produces one replacement. */
-const replaceDelay = 150
-/** How long a removed plugin may take to tear down before it counts as unclean. */
+/** How long a plugin may take to tear down before it counts as unclean. */
 const teardownTimeout = 5000
 
 function* ancestors(fiber: Fiber) {
@@ -72,9 +64,9 @@ export class PluginHost {
   private queue = Promise.resolve()
   private dirty = false
   private disposed = false
-  private readonly watches = new Map<string, { path: string; watch: Disposable }>()
-  private readonly timers = new Map<string, ReturnType<typeof setTimeout>>()
-  /** Errors logged inside the fibers of plugins that are being removed. */
+  private readonly overrides = new Map<string, PluginDescriptor>()
+  private readonly revisions = new Map<string, number>()
+  /** Errors logged inside plugin fibers while they are being torn down. */
   private readonly teardowns = new Map<Fiber, string[]>()
 
   constructor(
@@ -89,9 +81,8 @@ export class PluginHost {
       return () => {
         this.disposed = true
         for (const subscription of subscriptions) subscription.dispose()
-        for (const { watch } of this.watches.values()) watch.dispose()
-        for (const timer of this.timers.values()) clearTimeout(timer)
-        this.watches.clear()
+        this.overrides.clear()
+        this.revisions.clear()
         return this.queue
       }
     }, 'plugins.host')
@@ -109,33 +100,48 @@ export class PluginHost {
     ctx.logger.exporter(exporter)
   }
 
+  /** Performs the first reconciliation and reports its failure to the realm. */
+  initialize(): Promise<void> {
+    return this.schedule(true)
+  }
+
   /** Reconciles with the current sources; calls made while one is queued share it. */
-  schedule(): Promise<void> {
+  private schedule(report = false): Promise<void> {
     if (this.dirty) return this.queue
     this.dirty = true
     return this.enqueue(() => {
       this.dirty = false
       return this.reconcile()
-    })
+    }, report)
   }
 
-  /** Re-imports a plugin's module and rebuilds its fiber with the same entry and config. */
-  replace(id: string): Promise<void> {
-    return this.enqueue(async () => {
-      this.options.modules.invalidate(id)
-      await this.rebuild(id)
-    })
+  /** Reconciles a freshly read manifest and reloads the plugin in this realm when it remains present. */
+  reload(descriptor: PluginDescriptor, revision?: number): Promise<void> {
+    if (revision !== undefined && revision <= (this.revisions.get(descriptor.id) ?? 0)) return this.queue
+    if (revision !== undefined) this.revisions.set(descriptor.id, revision)
+    this.overrides.set(descriptor.id, descriptor)
+    return this.enqueue(() => this.reconcile(descriptor.id), true)
   }
 
-  private enqueue(task: () => Promise<void>) {
+  private enqueue(task: () => Promise<void>, report = false) {
     const run = this.queue.then(() => (this.disposed ? undefined : task()))
     this.queue = run.catch(error => this.ctx.logger('plugins').error(error))
-    return this.queue
+    return report ? run : this.queue
   }
 
-  private async reconcile() {
-    const { realm, loader, modules, plugins, settings } = this.options
-    const descriptors = plugins.current().filter(descriptor => descriptor.manifest[realm])
+  private descriptors() {
+    const source = this.options.plugins.current()
+    const locations = new Map(source.map(descriptor => [descriptor.id, descriptor.location]))
+    for (const [id, descriptor] of this.overrides) {
+      if (locations.get(id) !== descriptor.location) this.overrides.delete(id)
+    }
+    return source.map(descriptor => this.overrides.get(descriptor.id) ?? descriptor)
+  }
+
+  private async reconcile(reload?: string) {
+    const { realm, loader, modules, settings } = this.options
+    const descriptors = this.descriptors().filter(descriptor => descriptor.manifest[realm])
+    const existed = reload !== undefined && Object.hasOwn(loader.store, reload)
     const moved = modules.update(descriptors)
     const values = settings.current()
     const entries: EntryOptions[] = descriptors.map(descriptor => ({
@@ -154,7 +160,10 @@ export class PluginHost {
     await loader.root.update(entries)
     // The Loader restarts an entry for a config change but not for a new module file.
     for (const id of moved) await this.rebuild(id)
-    this.syncWatches(descriptors)
+    if (reload !== undefined && !moved.includes(reload) && existed && wanted.has(reload)) {
+      modules.invalidate(reload)
+      await this.rebuild(reload)
+    }
     await Promise.all(removed.map(([id, fiber]) => this.checkTeardown(id, fiber)))
   }
 
@@ -165,9 +174,10 @@ export class PluginHost {
     const reason = !settled
       ? `its teardown did not finish within ${teardownTimeout / 1000}s`
       : errors[0]?.split('\n')[0]
-    if (reason === undefined) return
+    if (reason === undefined) return true
     this.ctx.logger('plugins').warn('%C was not unloaded cleanly: %s', id, reason)
     this.options.onUncleanUnload?.(id, reason)
+    return false
   }
 
   /**
@@ -178,39 +188,14 @@ export class PluginHost {
     const entry = this.options.loader.store[id]
     if (!entry) return
     const fiber = entry.fiber
-    if (fiber?.runtime) this.ctx.registry.delete(fiber.runtime.callback)
-    while (fiber?.inertia) await fiber.inertia
+    if (fiber) {
+      this.teardowns.set(fiber, [])
+      if (fiber.runtime) this.ctx.registry.delete(fiber.runtime.callback)
+      if (!(await this.checkTeardown(id, fiber))) {
+        throw new Error(`refusing to reload ${id} after its unclean teardown`)
+      }
+    }
     entry.fiber = undefined
     await entry.refresh()
-  }
-
-  private syncWatches(descriptors: readonly PluginDescriptor[]) {
-    const { watcher, modules } = this.options
-    if (!watcher) return
-    const wanted = new Map<string, string>()
-    for (const descriptor of descriptors) {
-      const path = descriptor.development ? modules.path(descriptor.id) : undefined
-      if (path) wanted.set(descriptor.id, path)
-    }
-    for (const [id, current] of this.watches) {
-      if (wanted.get(id) === current.path) continue
-      current.watch.dispose()
-      this.watches.delete(id)
-    }
-    for (const [id, path] of wanted) {
-      if (this.watches.has(id)) continue
-      const watch = watcher.watch(path, () => {
-        clearTimeout(this.timers.get(id))
-        this.timers.set(
-          id,
-          setTimeout(() => {
-            this.timers.delete(id)
-            this.ctx.logger('plugins').info('replacing %C after a change to %s', id, path)
-            void this.replace(id)
-          }, replaceDelay),
-        )
-      })
-      this.watches.set(id, { path, watch })
-    }
   }
 }

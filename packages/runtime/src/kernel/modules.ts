@@ -53,10 +53,11 @@ export class PluginModules {
         moved.push(descriptor.id)
       }
     }
-    for (const id of [...this.records.keys()]) {
+    for (const id of this.records.keys()) {
       if (seen.has(id)) continue
+      const schema = this.records.get(id)!.schema
       this.records.delete(id)
-      this.setSchema(id, null)
+      if (schema !== undefined) this.emitSchema(id, null)
     }
     return moved
   }
@@ -98,6 +99,10 @@ export class PluginModules {
     const previous = record?.schema
     if (record) record.schema = schema
     if (JSON.stringify(previous ?? null) === JSON.stringify(schema)) return
+    this.emitSchema(id, schema)
+  }
+
+  private emitSchema(id: string, schema: JsonSchema | null) {
     for (const listener of this.schemaListeners) listener(id, schema)
   }
 }

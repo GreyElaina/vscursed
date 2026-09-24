@@ -17,7 +17,7 @@ import {
 } from '../vscode/commands.ts'
 import { describePlugins } from '../vscode/extensions.ts'
 import { logTo } from '../vscode/log.ts'
-import { nodeModuleHost, nodeWatcher } from '../vscode/node.ts'
+import { nodeModuleHost } from '../vscode/node.ts'
 import { services } from '../vscode/services.ts'
 import { asSettings, pluginsSetting } from '../vscode/settings.ts'
 
@@ -76,7 +76,6 @@ export const start: typeof Start = instantiationService => {
     modules: nodeModuleHost,
     plugins,
     settings,
-    watcher: nodeWatcher,
     log,
     onUncleanUnload: (id, reason) => unclean.fire({ id, reason }),
   })

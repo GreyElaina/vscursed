@@ -1,4 +1,4 @@
-import { BridgeError, type BridgeTransport, type PluginDescriptor, type Realm } from '@vscursed/api'
+import { BridgeError, type BridgeTransport, type PluginBuild, type PluginDescriptor, type Realm } from '@vscursed/api'
 import { Emitter, type Event } from 'vscode-internal/vs/base/common/event.js'
 import type { IChannel, IServerChannel } from 'vscode-internal/vs/base/parts/ipc/common/ipc.js'
 import type { RealmHandle } from '../kernel/realm.ts'
@@ -25,11 +25,22 @@ export interface UncleanUnload {
   reason: string
 }
 
+export interface BuildNotification extends PluginBuild {
+  revision: number
+}
+
+export interface ReloadRequest {
+  descriptor: PluginDescriptor
+  revision?: number
+}
+
 /**
  * Commands and events of the `vscursed` channel:
  *
  * - `demand(plugins)`: a window reports the plugins it enables (main and shared process only).
+ * - `reload(plugin)`: reconciles a freshly read plugin manifest and reloads its code.
  * - `schemas()` / event `schemas`: the JSON Schemas of this realm's plugin `Config`s.
+ * - event `build`: Vite+ completed a plugin build (main process only).
  * - `call(CallRequest)` / event `event(ListenRequest)`: bridge traffic, served here or routed on.
  * - event `unclean`: a plugin whose teardown failed, so its process should restart.
  */
@@ -39,6 +50,7 @@ export interface RealmServerOptions {
   demand?(client: string, plugins: PluginDescriptor[]): void
   /** Channels of other realms, for a realm that routes bridge traffic (the renderer). */
   route?(realm: Realm): IChannel | undefined
+  onDidBuild?: Event<BuildNotification>
   onUncleanUnload?: Event<UncleanUnload>
 }
 
@@ -54,6 +66,8 @@ export class RealmServer implements IServerChannel<string> {
       case 'schemas':
         await handle.ready
         return handle.modules.schemas()
+      case 'reload':
+        return handle.reload((arg as ReloadRequest).descriptor, (arg as ReloadRequest).revision)
       case 'call': {
         const request = arg as CallRequest
         if (request.realm === realm) return (await handle.bridge).invoke(request.channel, request.method, request.args)
@@ -78,6 +92,8 @@ export class RealmServer implements IServerChannel<string> {
       }
       case 'unclean':
         return this.options.onUncleanUnload ?? (() => ({ dispose() {} }))
+      case 'build':
+        return this.options.onDidBuild ?? (() => ({ dispose() {} }))
       case 'event': {
         const request = arg as ListenRequest
         if (request.realm !== realm) return this.forward(request.realm).listen('event', request)

@@ -16,8 +16,8 @@ VS Code 服务。
 
 插件的装载、配置更新、卸载都交给 Cordis Loader：运行域把「启用的扩展 × `vscursed.plugins` 配置」写成
 Loader 根组的条目列表（`loader.root.update()`），Loader 负责创建、`fiber.update()` 重启、移除。模块来源通过
-覆写 `Loader.import()` 提供；开发扩展（`--extensionDevelopmentPath`）的模块文件被监视，变化时从 registry 删除旧
-插件并 `entry.refresh()`，新模块以带修订号的 URL 重新导入，配置保持不变。
+覆写 `Loader.import()` 提供；Vite+ 成功完成插件的某个运行域构建后通知开发中的 VSCodium，renderer 协调该运行域
+从 registry 删除旧插件并执行 `entry.refresh()`，新模块以带修订号的 URL 重新导入，配置保持不变。
 
 ## 插件扩展
 
@@ -97,12 +97,17 @@ pnpm upstream prepare
 日常开发：
 
 ```sh
-pnpm dev                 # 构建并监视运行时与插件，以 .vscursed/ 下的独立配置启动 VSCodium
+pnpm dev                 # 构建并监视运行时，以 .vscursed/ 下的独立配置启动 VSCodium
 pnpm dev -- <folder>     # 其余参数交给 VSCodium
 pnpm build               # 运行时写入 VSCodium 源码树，插件打包为 VSIX
 pnpm check               # oxfmt 检查、类型检查、单元测试、补丁文件类型检查
 pnpm fmt
 ```
+
+启动后通过命令面板的 `Developer: Install Extension from Location...` 按需安装插件工作区，随后在 Extensions
+界面控制启停。需要 HMR 的插件在 VSCodium 集成终端中单独运行 `pnpm exec vp pack --watch`；Vite+ 每次成功
+构建后，成功完成构建的运行域会热替换插件，并保留当前配置。修改 `package.json` 中的 `vscursed` 清单后，
+运行 `VSCursed: Reload Plugin` 重新读取清单并协调各个运行域。
 
 修改 VSCodium 源码：
 
@@ -114,7 +119,8 @@ pnpm upstream check      # 用 VS Code 的编译器与选项检查补丁涉及�
 pnpm upstream package    # VSCodium 的生产打包
 ```
 
-插件的改动在所有运行域热替换；运行时自身的改动在重新加载窗口（renderer）或重启（其他运行域）后生效。
+插件模块的改动由 Vite+ 构建完成通知触发热替换；插件清单的改动由 `VSCursed: Reload Plugin` 应用。运行时自身
+的改动在重新加载窗口（renderer）或重启（其他运行域）后生效。
 这些重操作都在限制内存的 systemd scope 中运行（`VSCURSED_SCOPE_MEMORY`、`VSCURSED_ELECTRON_MEMORY`、
 `VSCURSED_MAX_OLD_SPACE_SIZE`）。
 

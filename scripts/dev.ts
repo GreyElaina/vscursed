@@ -1,19 +1,20 @@
 /**
- * Daily development: builds the realm runtime and every plugin, keeps rebuilding them on change, and
- * launches the prepared VSCodium with the plugins as development extensions and a profile under
- * `.vscursed/`. A rebuilt plugin is hot-replaced in every realm; a rebuilt runtime takes effect after
- * reloading the window (renderer) or restarting (other realms).
+ * Daily development: builds the realm runtime, keeps rebuilding it on change, and launches the
+ * prepared VSCodium with a profile under `.vscursed/`. A rebuilt runtime takes effect after reloading
+ * the window (renderer) or restarting (other realms). Plugin workspaces and their build processes are
+ * managed separately through VSCodium's Extensions UI.
  *
  *   pnpm dev [-- <VSCodium arguments>]
  */
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync, statSync } from 'node:fs'
-import { readdir } from 'node:fs/promises'
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { readPluginManifest } from '@vscursed/api'
+import { hmrSocketEnv } from '@vscursed/api'
 import { applyPatches, limited, npm, vscodeRoot, workspaceRoot } from './lib/upstream.ts'
 
 const profile = join(workspaceRoot, '.vscursed')
+const hmrSocket = process.platform === 'win32' ? `\\\\.\\pipe\\vscursed-${process.pid}` : join(profile, 'hmr.sock')
+mkdirSync(profile, { recursive: true })
 /** Memory ceiling of the VSCodium process tree. */
 const electronMemory = process.env.VSCURSED_ELECTRON_MEMORY ?? '4G'
 
@@ -22,11 +23,6 @@ if (!existsSync(join(vscodeRoot, 'out/main.js'))) {
   process.exit(1)
 }
 if (await applyPatches(false)) await npm(['run', 'transpile-client'])
-
-const pluginsRoot = join(workspaceRoot, 'plugins')
-const plugins = (await readdir(pluginsRoot, { withFileTypes: true }))
-  .filter(entry => entry.isDirectory() && existsSync(join(pluginsRoot, entry.name, 'package.json')))
-  .map(entry => join(pluginsRoot, entry.name))
 
 /** Starts `vp pack --watch` and resolves once each of its `configs` builds has completed once. */
 function watch(dir: string, configs: number) {
@@ -52,13 +48,7 @@ function watch(dir: string, configs: number) {
   return { child, ready }
 }
 
-const watchers = [
-  watch(join(workspaceRoot, 'packages/runtime'), 4),
-  ...plugins.map(dir => {
-    const manifest = readPluginManifest(JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')))
-    return watch(dir, Object.keys(manifest ?? {}).length)
-  }),
-]
+const watchers = [watch(join(workspaceRoot, 'packages/runtime'), 4)]
 const stop = () => {
   for (const { child } of watchers) {
     if (child.exitCode === null && child.pid) process.kill(-child.pid)
@@ -91,11 +81,10 @@ try {
     [
       `--user-data-dir=${join(profile, 'user-data')}`,
       `--extensions-dir=${join(profile, 'extensions')}`,
-      ...plugins.map(dir => `--extensionDevelopmentPath=${dir}`),
       ...sandboxArguments(),
       ...process.argv.slice(2).filter(arg => arg !== '--'),
     ],
-    { cwd: vscodeRoot, memory: electronMemory },
+    { cwd: vscodeRoot, env: { ...process.env, [hmrSocketEnv]: hmrSocket }, memory: electronMemory },
   )
 } finally {
   stop()

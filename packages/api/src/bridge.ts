@@ -23,6 +23,8 @@ export type Event<T> = (listener: (event: T) => unknown) => Disposable
  *     'sample.clock': ChannelSpec<'sharedProcess', { now(): number; onTick: Event<number> }>
  *   }
  * }
+ *
+ * ctx.bridge.provide('sharedProcess', 'sample.clock', clock)
  * ```
  *
  * Members named `on[A-Z]...` are events, all other members are methods. Arguments, results and event
@@ -54,6 +56,7 @@ export type Remote<T> = {
 export interface BridgeTransport {
   call(realm: Realm, channel: string, method: string, args: unknown[]): Promise<unknown>
   listen(realm: Realm, channel: string, event: string): Event<unknown>
+  ready(realm: Realm, channel: string): Promise<void>
 }
 
 export interface BridgeConfig {
@@ -72,6 +75,7 @@ export class Bridge extends Service {
   readonly realm: Realm
   private readonly transport: BridgeTransport
   private readonly providers = new Map<string, object>()
+  private readonly providerWaiters = new Map<string, Set<() => void>>()
   /** Subscriptions that remote realms hold on local providers, ended when the provider goes away. */
   private readonly subscriptions = new Map<string, Set<Disposable>>()
 
@@ -81,16 +85,21 @@ export class Bridge extends Service {
     this.transport = config.transport
   }
 
-  provide<K extends ChannelName>(name: K, api: ChannelApi<K>): () => Promise<void> {
+  provide<K extends ChannelName>(realm: ChannelRealm<K>, name: K, api: ChannelApi<K>): () => Promise<void> {
+    if (realm !== this.realm) {
+      throw new BridgeError(`${realm} channel ${name} cannot be provided from ${this.realm}`)
+    }
     return this.ctx.effect(() => {
       if (this.providers.has(name)) throw new BridgeError(`channel ${name} is already provided in ${this.realm}`)
       this.providers.set(name, api)
+      for (const resolve of this.providerWaiters.get(name) ?? []) resolve()
+      this.providerWaiters.delete(name)
       return () => {
         this.providers.delete(name)
         for (const subscription of this.subscriptions.get(name) ?? []) subscription.dispose()
         this.subscriptions.delete(name)
       }
-    }, `bridge.provide(${name})`)
+    }, `bridge.provide(${realm}, ${name})`)
   }
 
   /**
@@ -113,6 +122,22 @@ export class Bridge extends Service {
         }
         return (...args: unknown[]) => this.call(realm, name, member, args)
       },
+    })
+  }
+
+  /** Resolves when the channel has a provider in its declared realm. */
+  ready<K extends ChannelName>(realm: ChannelRealm<K>, name: K): Promise<void> {
+    if (realm !== this.realm) return this.transport.ready(realm, name)
+    return this.whenProvided(name)
+  }
+
+  /** Runtime endpoint behind {@link ready}; callers should use the typed form. */
+  whenProvided(name: string): Promise<void> {
+    if (this.providers.has(name)) return Promise.resolve()
+    return new Promise(resolve => {
+      let waiters = this.providerWaiters.get(name)
+      if (!waiters) this.providerWaiters.set(name, (waiters = new Set()))
+      waiters.add(resolve)
     })
   }
 

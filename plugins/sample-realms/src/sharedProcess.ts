@@ -15,7 +15,7 @@ export function apply(ctx: Context, config: Config) {
     }, config.interval)
     return () => clearInterval(timer)
   }, 'sample.clock timer')
-  ctx.bridge.provide('sample.clock', {
+  ctx.bridge.provide('sharedProcess', 'sample.clock', {
     now: () => Date.now(),
     onTick: listener => {
       listeners.add(listener)

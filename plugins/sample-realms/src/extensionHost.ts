@@ -9,7 +9,7 @@ export const inject = ['bridge', 'vscode']
 
 export function apply(ctx: Context) {
   const extensions = ctx.vscode.get(IExtHostExtensionService)
-  ctx.bridge.provide('sample.extensionHost', {
+  ctx.bridge.provide('extensionHost', 'sample.extensionHost', {
     async describe() {
       const registry = await extensions.getExtensionRegistry()
       const count = registry.getAllExtensionDescriptions().length

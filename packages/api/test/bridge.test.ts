@@ -27,6 +27,7 @@ describe('Bridge', () => {
   const transport: BridgeTransport = {
     call: async (realm, channel, method, args) => `${realm}:${channel}.${method}(${args.join()})`,
     listen: () => () => ({ dispose() {} }),
+    ready: async () => {},
   }
 
   it('serves local channels and ties subscriptions to both sides', async () => {
@@ -35,7 +36,7 @@ describe('Bridge', () => {
     const source = counter()
     const provider = root.plugin({
       inject: ['bridge'],
-      apply: (ctx: Context) => void ctx.bridge.provide('test.counter', source.api),
+      apply: (ctx: Context) => void ctx.bridge.provide('renderer', 'test.counter', source.api),
     })
     await provider
 
@@ -65,7 +66,7 @@ describe('Bridge', () => {
     const source = counter()
     const provider = root.plugin({
       inject: ['bridge'],
-      apply: (ctx: Context) => void ctx.bridge.provide('test.counter', source.api),
+      apply: (ctx: Context) => void ctx.bridge.provide('renderer', 'test.counter', source.api),
     })
     await provider
     bridge.subscribe('test.counter', 'onCount', () => {})

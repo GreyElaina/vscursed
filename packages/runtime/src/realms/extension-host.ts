@@ -2,6 +2,7 @@ import type { PluginDescriptor } from '@vscursed/api'
 import type { start as Start } from 'vscode-internal/vs/vscursed/runtime/extensionHost.js'
 import { Emitter, type Event } from 'vscode-internal/vs/base/common/event.js'
 import { ILoggerService } from 'vscode-internal/vs/platform/log/common/log.js'
+import { ExtensionIdentifier } from 'vscode-internal/vs/platform/extensions/common/extensions.js'
 import { IExtHostCommands } from 'vscode-internal/vs/workbench/api/common/extHostCommands.js'
 import { IExtHostConfiguration } from 'vscode-internal/vs/workbench/api/common/extHostConfiguration.js'
 import { IExtHostExtensionService } from 'vscode-internal/vs/workbench/api/common/extHostExtensionService.js'
@@ -58,6 +59,18 @@ export const start: typeof Start = instantiationService => {
     register: (id, handler) => commands.registerCommand(true, id, (...args: any[]): any => handler(...args)),
     execute: (id, ...args) => commands.executeCommand(id, ...args),
   }
+  const extensionHostModuleHost = {
+    ...nodeModuleHost,
+    import: async (url: string, id: string) => {
+      const identifier = new ExtensionIdentifier(id)
+      await extensionService.activateByIdWithErrors(identifier, {
+        startup: false,
+        extensionId: identifier,
+        activationEvent: 'vscursed',
+      })
+      return nodeModuleHost.import(url, id)
+    },
+  }
   const renderer = channelOverCommands('extensionHost', link, true)
   const unclean = new Emitter<UncleanUnload>()
   const handle = startRealm({
@@ -65,7 +78,7 @@ export const start: typeof Start = instantiationService => {
     instantiationService,
     services,
     transport: channelTransport('extensionHost', () => renderer),
-    modules: nodeModuleHost,
+    modules: extensionHostModuleHost,
     plugins,
     settings,
     log,

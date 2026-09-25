@@ -5,7 +5,7 @@ import { configJsonSchema, type JsonSchema } from './schema.ts'
 export interface ModuleHost {
   /** Maps an absolute file path to the URL that this realm's `import()` accepts. */
   toUrl(path: string): string
-  import(url: string): Promise<unknown>
+  import(url: string, id: string): Promise<unknown>
 }
 
 interface ModuleRecord {
@@ -76,7 +76,7 @@ export class PluginModules {
     const record = this.records.get(id)
     if (!record) throw new Error(`no ${this.realm} module is known for plugin ${id}`)
     const url = this.host.toUrl(record.path)
-    const exports = await this.host.import(record.revision ? `${url}?revision=${record.revision}` : url)
+    const exports = await this.host.import(record.revision ? `${url}?revision=${record.revision}` : url, id)
     const schema = configJsonSchema(Loader.prototype.unwrapExports(exports)?.Config) ?? null
     // The plugin may have been removed while its module loaded.
     const current = this.records.get(id)

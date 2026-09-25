@@ -75,6 +75,11 @@ export class RealmServer implements IServerChannel<string> {
         if (request.realm === realm) return (await handle.bridge).invoke(request.channel, request.method, request.args)
         return this.forward(request.realm).call('call', request)
       }
+      case 'ready': {
+        const request = arg as Pick<CallRequest, 'realm' | 'channel'>
+        if (request.realm === realm) return (await handle.bridge).whenProvided(request.channel)
+        return this.forward(request.realm).call('ready', request)
+      }
     }
     throw new Error(`unknown command ${command}`)
   }
@@ -133,5 +138,6 @@ export function channelTransport(self: Realm, route: (realm: Realm) => IChannel 
       channel(realm).call('call', { realm, channel: name, method, args } satisfies CallRequest),
     listen: (realm, name, event) =>
       channel(realm).listen('event', { realm, channel: name, event } satisfies ListenRequest),
+    ready: (realm, name) => channel(realm).call('ready', { realm, channel: name }),
   }
 }

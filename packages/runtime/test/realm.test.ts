@@ -53,7 +53,7 @@ describe('startRealm', () => {
       realm: 'renderer',
       instantiationService: { invokeFunction: (fn: any) => fn({ get: () => undefined }) } as never,
       services: { service: id => id },
-      transport: { call: async () => undefined, listen: () => () => ({ dispose() {} }) },
+      transport: { call: async () => undefined, listen: () => () => ({ dispose() {} }), ready: async () => {} },
       modules: {
         toUrl: path => `memory:${path}`,
         async import(url) {

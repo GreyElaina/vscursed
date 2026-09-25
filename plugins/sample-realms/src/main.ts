@@ -9,7 +9,7 @@ export const inject = ['bridge', 'vscode']
 
 export function apply(ctx: Context) {
   const product = ctx.vscode.get(IProductService)
-  ctx.bridge.provide('sample.main', {
+  ctx.bridge.provide('main', 'sample.main', {
     describe: () => ({ realm: 'main', pid: process.pid, detail: `${product.nameLong} ${product.version}` }),
   })
 }

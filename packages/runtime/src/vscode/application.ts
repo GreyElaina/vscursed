@@ -1,12 +1,12 @@
 import type { IPCServer } from 'vscode-internal/vs/base/parts/ipc/common/ipc.js'
 import { IConfigurationService } from 'vscode-internal/vs/platform/configuration/common/configuration.js'
 import type { IInstantiationService } from 'vscode-internal/vs/platform/instantiation/common/instantiation.js'
-import { ILogService } from 'vscode-internal/vs/platform/log/common/log.js'
+import { ILoggerService } from 'vscode-internal/vs/platform/log/common/log.js'
 import { startRealm } from '../kernel/realm.ts'
 import { channelName, channelTransport, RealmServer } from './channel.ts'
 import { NodeDebugEndpoints } from './debug.ts'
 import { WindowDemand } from './demand.ts'
-import { logTo } from './log.ts'
+import { createRealmLogger, logTo } from './log.ts'
 import { nodeModuleHost } from './node.ts'
 import { services } from './services.ts'
 import { configurationSettings } from './settings.ts'
@@ -20,9 +20,9 @@ export function startApplicationRealm(
   instantiationService: IInstantiationService,
   server: IPCServer<string>,
 ) {
-  const [configurationService, logService] = instantiationService.invokeFunction(accessor => [
+  const [configurationService, loggerService] = instantiationService.invokeFunction(accessor => [
     accessor.get(IConfigurationService),
-    accessor.get(ILogService),
+    accessor.get(ILoggerService),
   ])
   const demand = new WindowDemand()
   const debug = new NodeDebugEndpoints()
@@ -34,7 +34,7 @@ export function startApplicationRealm(
     modules: nodeModuleHost,
     plugins: demand,
     settings: configurationSettings(configurationService),
-    log: logTo(logService),
+    log: logTo(createRealmLogger(loggerService, realm)),
   })
   server.registerChannel(
     channelName,

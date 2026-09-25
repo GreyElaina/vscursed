@@ -1,7 +1,7 @@
 import type { PluginDescriptor } from '@vscursed/api'
 import type { start as Start } from 'vscode-internal/vs/vscursed/runtime/extensionHost.js'
 import { Emitter, type Event } from 'vscode-internal/vs/base/common/event.js'
-import { ILogService } from 'vscode-internal/vs/platform/log/common/log.js'
+import { ILoggerService } from 'vscode-internal/vs/platform/log/common/log.js'
 import { IExtHostCommands } from 'vscode-internal/vs/workbench/api/common/extHostCommands.js'
 import { IExtHostConfiguration } from 'vscode-internal/vs/workbench/api/common/extHostConfiguration.js'
 import { IExtHostExtensionService } from 'vscode-internal/vs/workbench/api/common/extHostExtensionService.js'
@@ -16,20 +16,20 @@ import {
 } from '../vscode/commands.ts'
 import { targetRegistration, type ProviderEvent } from '../vscode/development.ts'
 import { describePlugins } from '../vscode/extensions.ts'
-import { logTo } from '../vscode/log.ts'
+import { createRealmLogger, logTo } from '../vscode/log.ts'
 import { nodeModuleHost } from '../vscode/node.ts'
 import { ProviderConnection } from '../vscode/provider-connection.ts'
 import { services } from '../vscode/services.ts'
 import { asSettings, pluginsSetting } from '../vscode/settings.ts'
 
 export const start: typeof Start = instantiationService => {
-  const [commands, extensionService, configuration, logService] = instantiationService.invokeFunction(accessor => [
+  const [commands, extensionService, configuration, loggerService] = instantiationService.invokeFunction(accessor => [
     accessor.get(IExtHostCommands),
     accessor.get(IExtHostExtensionService),
     accessor.get(IExtHostConfiguration),
-    accessor.get(ILogService),
+    accessor.get(ILoggerService),
   ])
-  const log = logTo(logService)
+  const log = logTo(createRealmLogger(loggerService, 'extensionHost'))
 
   // The extensions of this host, as the window assigned them; empty until the registry is ready.
   let descriptors: PluginDescriptor[] = []

@@ -1,0 +1,67 @@
+{
+  "name": "supermaven",
+  "displayName": "VSCursed: Supermaven",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Supermaven completions as a native inline completion provider, served by an sm-agent in the shared process.",
+  "categories": [
+    "Other"
+  ],
+  "license": "MIT",
+  "publisher": "vscursed",
+  "files": [
+    "dist",
+    "l10n",
+    "package.nls.json",
+    "package.nls.zh-cn.json"
+  ],
+  "type": "module",
+  "main": "./dist/extensionHost.js",
+  "scripts": {
+    "build": "vp pack && vscursed vsix",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@vscursed/api": "workspace:*",
+    "@vscursed/build": "workspace:*",
+    "cordis": "4.0.0-rc.10",
+    "zod": "^4.6.5"
+  },
+  "l10n": "./l10n",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vscursed.supermaven.acceptLine",
+        "title": "%command.acceptLine%",
+        "category": "%command.category%",
+        "enablement": "vscursed.supermaven.lineReady"
+      },
+      {
+        "command": "vscursed.supermaven.restart",
+        "title": "%command.restart%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "vscursed.supermaven.showStatus",
+        "title": "%command.showStatus%",
+        "category": "%command.category%"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "vscursed.supermaven.acceptLine",
+        "key": "alt+tab",
+        "when": "editorTextFocus && !editorReadonly && vscursed.supermaven.lineReady"
+      }
+    ]
+  },
+  "activationEvents": [],
+  "engines": {
+    "vscode": "^1.135.0"
+  },
+  "vscursed": {
+    "renderer": "./dist/renderer.js",
+    "sharedProcess": "./dist/sharedProcess.js",
+    "extensionHost": "./dist/extensionHost.js"
+  }
+}

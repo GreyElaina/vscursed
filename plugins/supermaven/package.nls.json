@@ -1,0 +1,6 @@
+{
+  "command.acceptLine": "Accept Next Line",
+  "command.category": "Supermaven",
+  "command.restart": "Restart Sidecar",
+  "command.showStatus": "Show Status"
+}

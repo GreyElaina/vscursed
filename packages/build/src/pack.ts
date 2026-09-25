@@ -40,7 +40,11 @@ export function pluginPack(root = process.cwd()): UserConfig[] {
     dts: false,
     clean: false,
     fixedExtension: false,
-    deps: { alwaysBundle: [/.*/], onlyBundle: false },
+    deps:
+      realm === 'extensionHost'
+        ? // The extension host resolves `vscode` to the extension's own API instance, by the importing file's path.
+          { neverBundle: ['vscode'], alwaysBundle: (id: string) => id !== 'vscode', onlyBundle: false }
+        : { alwaysBundle: [/.*/], onlyBundle: false },
     plugins: [sharedModules(), vscodeInternalBoundary()],
     onSuccess: () => provider?.built(realm),
     // One file per realm: its URL carries the revision that hot replacement bumps.

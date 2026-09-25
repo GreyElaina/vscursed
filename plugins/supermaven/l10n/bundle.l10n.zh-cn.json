@@ -1,0 +1,21 @@
+{
+  "Accept": "接受",
+  "Account: {0}": "账号：{0}",
+  "Completion available": "补全内容可用",
+  "Completion: {0}": "补全：{0}",
+  "Connected": "已连接",
+  "Connection: {0}": "连接：{0}",
+  "Disconnected": "连接断开",
+  "Error: {0}": "错误：{0}",
+  "Fetching": "正在获取",
+  "Latest answer: {0}": "最近回答：{0}",
+  "No completion": "暂无补全",
+  "Not started": "尚未启动",
+  "Preview": "预览",
+  "Process exited": "进程已退出",
+  "Restart sidecar": "重启守护进程",
+  "Starting": "正在启动",
+  "Supermaven: {0}, {1}": "Supermaven：{0}，{1}",
+  "Unable to connect": "无法连接",
+  "Unknown account": "未知账号"
+}

@@ -77,7 +77,11 @@ export class PluginModules {
     if (!record) throw new Error(`no ${this.realm} module is known for plugin ${id}`)
     const url = this.host.toUrl(record.path)
     const exports = await this.host.import(record.revision ? `${url}?revision=${record.revision}` : url)
-    this.setSchema(id, configJsonSchema(Loader.prototype.unwrapExports(exports)?.Config) ?? null)
+    const schema = configJsonSchema(Loader.prototype.unwrapExports(exports)?.Config) ?? null
+    // The plugin may have been removed while its module loaded.
+    const current = this.records.get(id)
+    if (current) current.schema = schema
+    this.emitSchema(id, schema)
     return exports
   }
 
@@ -92,14 +96,6 @@ export class PluginModules {
   onDidChangeSchema(listener: SchemaListener) {
     this.schemaListeners.add(listener)
     return { dispose: () => void this.schemaListeners.delete(listener) }
-  }
-
-  private setSchema(id: string, schema: JsonSchema | null) {
-    const record = this.records.get(id)
-    const previous = record?.schema
-    if (record) record.schema = schema
-    if (JSON.stringify(previous ?? null) === JSON.stringify(schema)) return
-    this.emitSchema(id, schema)
   }
 
   private emitSchema(id: string, schema: JsonSchema | null) {

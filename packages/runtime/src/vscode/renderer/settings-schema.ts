@@ -33,25 +33,20 @@ export class SettingsSchema extends Disposable {
     this.render()
   }
 
-  /** Replaces what one realm reported: a map from plugin id to its schema, `null` for no `Config`. */
+  /**
+   * Replaces what one realm reported: a map from plugin id to its schema, `null` for no `Config`.
+   * Registration is skipped when the rendered node does not change.
+   */
   report(realm: Realm, schemas: Readonly<Record<string, JsonSchema | null>>) {
-    const changed = new Set<string>()
     for (const [id, realms] of this.schemas) {
-      if (!(id in schemas) && realm in realms) {
-        delete realms[realm]
-        changed.add(id)
-      }
+      if (id in schemas) continue
+      delete realms[realm]
       if (!Object.keys(realms).length) this.schemas.delete(id)
     }
     for (const [id, schema] of Object.entries(schemas)) {
-      const realms = this.schemas.get(id) ?? {}
-      if (realm in realms && (realms[realm] === schema || JSON.stringify(realms[realm]) === JSON.stringify(schema)))
-        continue
-      realms[realm] = schema
-      this.schemas.set(id, realms)
-      changed.add(id)
+      this.schemas.set(id, { ...this.schemas.get(id), [realm]: schema })
     }
-    if (this.plugins.some(plugin => changed.has(plugin.id))) this.render()
+    this.render()
   }
 
   private render() {

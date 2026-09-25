@@ -5,7 +5,6 @@ import { ILogService } from 'vscode-internal/vs/platform/log/common/log.js'
 import { IExtHostCommands } from 'vscode-internal/vs/workbench/api/common/extHostCommands.js'
 import { IExtHostConfiguration } from 'vscode-internal/vs/workbench/api/common/extHostConfiguration.js'
 import { IExtHostExtensionService } from 'vscode-internal/vs/workbench/api/common/extHostExtensionService.js'
-import { sameRealmPlugins } from '../kernel/descriptors.ts'
 import type { PluginSource, SettingsSource } from '../kernel/host.ts'
 import { startRealm } from '../kernel/realm.ts'
 import { channelTransport, RealmServer, type UncleanUnload } from '../vscode/channel.ts'
@@ -35,33 +34,24 @@ export const start: typeof Start = instantiationService => {
   // The extensions of this host, as the window assigned them; empty until the registry is ready.
   let descriptors: PluginDescriptor[] = []
   const pluginChanges = new Emitter<void>()
-  const plugins: PluginSource = { current: () => descriptors, onDidChange: listener => pluginChanges.event(listener) }
+  const plugins: PluginSource = { current: () => descriptors, onDidChange: pluginChanges.event }
   void extensionService.getExtensionRegistry().then(registry => {
     const read = () => {
-      const next = describePlugins(registry.getAllExtensionDescriptions(), message => log('warn', message))
-      const changed = !sameRealmPlugins(descriptors, next, 'extensionHost')
-      descriptors = next
-      if (changed) pluginChanges.fire()
+      descriptors = describePlugins(registry.getAllExtensionDescriptions(), message => log('warn', message))
+      pluginChanges.fire()
     }
     registry.onDidChange(read)
     read()
   })
 
-  let values: Readonly<Record<string, unknown>> = {}
-  let serializedValues = JSON.stringify(values)
+  // Empty until the configuration provider is ready.
+  let readSettings = (): Readonly<Record<string, unknown>> => ({})
   const settingChanges = new Emitter<void>()
-  const settings: SettingsSource = { current: () => values, onDidChange: listener => settingChanges.event(listener) }
+  const settings: SettingsSource = { current: () => readSettings(), onDidChange: settingChanges.event }
   void configuration.getConfigProvider().then(provider => {
-    const read = () => {
-      const next = asSettings(provider.getConfiguration().get(pluginsSetting))
-      const serialized = JSON.stringify(next)
-      if (serialized === serializedValues) return
-      values = next
-      serializedValues = serialized
-      settingChanges.fire()
-    }
-    provider.onDidChangeConfiguration(event => event.affectsConfiguration(pluginsSetting) && read())
-    read()
+    readSettings = () => asSettings(provider.getConfiguration().get(pluginsSetting))
+    provider.onDidChangeConfiguration(event => event.affectsConfiguration(pluginsSetting) && settingChanges.fire())
+    settingChanges.fire()
   })
 
   const link: CommandLink = {

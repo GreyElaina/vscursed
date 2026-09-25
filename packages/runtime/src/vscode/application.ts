@@ -24,7 +24,7 @@ export function startApplicationRealm(
     accessor.get(IConfigurationService),
     accessor.get(ILogService),
   ])
-  const demand = new WindowDemand(realm)
+  const demand = new WindowDemand()
   const debug = new NodeDebugEndpoints()
   const handle = startRealm({
     realm,

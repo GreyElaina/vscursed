@@ -1,0 +1,37 @@
+{
+  "name": "rust-outline",
+  "displayName": "VSCursed: Rust Outline",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Groups Rust impl blocks under their types in the Outline view.",
+  "categories": [
+    "Other"
+  ],
+  "license": "MIT",
+  "publisher": "vscursed",
+  "files": [
+    "dist",
+    "l10n"
+  ],
+  "type": "module",
+  "main": "./dist/extensionHost.js",
+  "scripts": {
+    "build": "vp pack && vscursed vsix",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@vscursed/api": "workspace:*",
+    "@vscursed/build": "workspace:*",
+    "cordis": "4.0.0-rc.10",
+    "zod": "^4.6.5"
+  },
+  "l10n": "./l10n",
+  "activationEvents": [],
+  "engines": {
+    "vscode": "^1.135.0"
+  },
+  "vscursed": {
+    "renderer": "./dist/renderer.js",
+    "extensionHost": "./dist/extensionHost.js"
+  }
+}

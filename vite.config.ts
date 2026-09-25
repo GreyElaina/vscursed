@@ -9,6 +9,6 @@ export default defineConfig({
     ignorePatterns: ['upstream/vscodium/**', 'upstream/patches/**', '**/dist/**', '.vscursed/**', 'pnpm-lock.yaml'],
   },
   test: {
-    include: ['packages/*/test/**/*.test.ts'],
+    include: ['packages/*/test/**/*.test.ts', 'plugins/*/test/**/*.test.ts'],
   },
 })

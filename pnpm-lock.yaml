@@ -238,6 +238,36 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
 
+  plugins/reveal-at-top:
+    devDependencies:
+      '@vscursed/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@vscursed/build':
+        specifier: workspace:*
+        version: link:../../packages/build
+      cordis:
+        specifier: 4.0.0-rc.10
+        version: 4.0.0-rc.10(@cordisjs/plugin-loader@1.0.0-rc.7)
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+
+  plugins/rust-outline:
+    devDependencies:
+      '@vscursed/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@vscursed/build':
+        specifier: workspace:*
+        version: link:../../packages/build
+      cordis:
+        specifier: 4.0.0-rc.10
+        version: 4.0.0-rc.10(@cordisjs/plugin-loader@1.0.0-rc.7)
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+
   plugins/sample-command-log:
     devDependencies:
       '@vscursed/api':

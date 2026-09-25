@@ -2,7 +2,6 @@ import { Context, Service } from 'cordis'
 import type {
   IInstantiationService,
   ServiceIdentifier,
-  ServicesAccessor,
 } from 'vscode-internal/vs/platform/instantiation/common/instantiation.js'
 import type { Realm } from './realm.ts'
 
@@ -34,10 +33,6 @@ export class VSCode extends Service {
 
   get<T>(id: ServiceIdentifier<T>): T {
     return this.instantiationService.invokeFunction(accessor => accessor.get(id))
-  }
-
-  invoke<R>(fn: (accessor: ServicesAccessor) => R): R {
-    return this.instantiationService.invokeFunction(fn)
   }
 
   /**

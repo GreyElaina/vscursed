@@ -1,10 +1,10 @@
 import { readPluginManifest, type Realm } from '@vscursed/api'
 import { Disposable } from 'vscode-internal/vs/base/common/lifecycle.js'
 import { joinPath } from 'vscode-internal/vs/base/common/resources.js'
-import type { IFileService } from 'vscode-internal/vs/platform/files/common/files.js'
-import type { ILogService } from 'vscode-internal/vs/platform/log/common/log.js'
-import { Severity, type INotificationService } from 'vscode-internal/vs/platform/notification/common/notification.js'
-import type { IWorkbenchExtensionManagementService } from 'vscode-internal/vs/workbench/services/extensionManagement/common/extensionManagement.js'
+import { IFileService } from 'vscode-internal/vs/platform/files/common/files.js'
+import { INotificationService, Severity } from 'vscode-internal/vs/platform/notification/common/notification.js'
+import { IWorkbenchExtensionManagementService } from 'vscode-internal/vs/workbench/services/extensionManagement/common/extensionManagement.js'
+import { IVSCursedService } from './service.ts'
 
 /**
  * Checks each newly installed extension for a Cordis plugin: a malformed `vscursed` field or a missing
@@ -12,10 +12,10 @@ import type { IWorkbenchExtensionManagementService } from 'vscode-internal/vs/wo
  */
 export class InstallProbe extends Disposable {
   constructor(
-    extensionManagementService: IWorkbenchExtensionManagementService,
-    private readonly fileService: IFileService,
-    private readonly notificationService: INotificationService,
-    private readonly logService: ILogService,
+    @IVSCursedService private readonly vscursed: IVSCursedService,
+    @IWorkbenchExtensionManagementService extensionManagementService: IWorkbenchExtensionManagementService,
+    @IFileService private readonly fileService: IFileService,
+    @INotificationService private readonly notificationService: INotificationService,
   ) {
     super()
     this._register(
@@ -46,6 +46,6 @@ export class InstallProbe extends Disposable {
       })
       return
     }
-    this.logService.info(`[VSCursed] installed Cordis plugin ${id} for ${realms.join(', ')}`)
+    this.vscursed.logger.info(`installed Cordis plugin ${id} for ${realms.join(', ')}`)
   }
 }

@@ -8,19 +8,22 @@ import {
 import { Codicon } from 'vscode-internal/vs/base/common/codicons.js'
 import { Disposable } from 'vscode-internal/vs/base/common/lifecycle.js'
 import { URI } from 'vscode-internal/vs/base/common/uri.js'
-import type { IChannel } from 'vscode-internal/vs/base/parts/ipc/common/ipc.js'
 import { localize2 } from 'vscode-internal/vs/nls.js'
-import { MenuId, MenuRegistry } from 'vscode-internal/vs/platform/actions/common/actions.js'
-import { CommandsRegistry } from 'vscode-internal/vs/platform/commands/common/commands.js'
+import { Action2, MenuId, registerAction2 } from 'vscode-internal/vs/platform/actions/common/actions.js'
 import { ContextKeyExpr } from 'vscode-internal/vs/platform/contextkey/common/contextkey.js'
 import { IDialogService } from 'vscode-internal/vs/platform/dialogs/common/dialogs.js'
 import { SyncDescriptor } from 'vscode-internal/vs/platform/instantiation/common/descriptors.js'
-import { IInstantiationService } from 'vscode-internal/vs/platform/instantiation/common/instantiation.js'
+import { InstantiationType, registerSingleton } from 'vscode-internal/vs/platform/instantiation/common/extensions.js'
+import {
+  createDecorator,
+  IInstantiationService,
+  type ServicesAccessor,
+} from 'vscode-internal/vs/platform/instantiation/common/instantiation.js'
 import { INotificationService } from 'vscode-internal/vs/platform/notification/common/notification.js'
 import { IQuickInputService, type IQuickPickItem } from 'vscode-internal/vs/platform/quickinput/common/quickInput.js'
 import { Registry } from 'vscode-internal/vs/platform/registry/common/platform.js'
 import { IStorageService, StorageScope, StorageTarget } from 'vscode-internal/vs/platform/storage/common/storage.js'
-import { IURLService, type IOpenURLOptions } from 'vscode-internal/vs/platform/url/common/url.js'
+import { IURLService, type IOpenURLOptions, type IURLHandler } from 'vscode-internal/vs/platform/url/common/url.js'
 import { TreeView, TreeViewPane } from 'vscode-internal/vs/workbench/browser/parts/views/treeView.js'
 import {
   Extensions,
@@ -39,15 +42,15 @@ import {
   type IDebugSessionOptions,
 } from 'vscode-internal/vs/workbench/contrib/debug/common/debug.js'
 import { VIEWLET_ID } from 'vscode-internal/vs/workbench/contrib/extensions/common/extensions.js'
+import { IWorkbenchEnvironmentService } from 'vscode-internal/vs/workbench/services/environment/common/environmentService.js'
 import { IWorkbenchExtensionManagementService } from 'vscode-internal/vs/workbench/services/extensionManagement/common/extensionManagement.js'
 import type { DebugEndpoint } from '../debug.ts'
-import { developmentEnv } from '../development.ts'
+import { developmentEnv, targetRegistration } from '../development.ts'
 import { setDevelopmentState } from './extension-feature.ts'
+import { isDevelopmentTargetContext, IVSCursedService, vscursedCategory } from './service.ts'
 
 const authorizationStorageKey = 'vscursed.development.providers'
 const targetsViewId = 'vscursed.development.targets'
-const importCommand = 'vscursed.importProvider'
-const disconnectCommand = 'vscursed.disconnectProvider'
 
 /** `extensionHost` launch configuration of js-debug, which opens the Target window. */
 interface TargetLaunchConfig extends IConfig {
@@ -103,16 +106,29 @@ class TargetTree implements ITreeViewDataProvider {
  * URI into a Target window under js-debug, and attaches to the application-wide realms the plugin uses.
  * The provider registration reaches the Target through the launch configuration's environment.
  */
-export class DevelopmentDebugger extends Disposable {
-  private authorizations: ProviderAuthorization[]
+export interface IDevelopmentDebugger {
+  readonly _serviceBrand: undefined
+  /** The provider workspaces this profile trusts, one per extension. */
+  readonly authorizations: readonly ProviderAuthorization[]
+  /** Imports a `vscodium://vscursed/provider/import` URI; returns whether it was one. */
+  handleURL(uri: URI): Promise<boolean>
+  /** Stops the extension's Target and forgets its provider workspace. */
+  disconnect(extensionId: string): Promise<void>
+}
+
+export const IDevelopmentDebugger = createDecorator<IDevelopmentDebugger>('vscursedDevelopmentDebugger')
+
+class DevelopmentDebugger extends Disposable implements IDevelopmentDebugger, IURLHandler {
+  declare readonly _serviceBrand: undefined
+  authorizations: ProviderAuthorization[]
   private readonly sessions = new Map<string, TargetSession>()
   private readonly tree: TreeView
 
   constructor(
-    private readonly channels: Record<'main' | 'sharedProcess', IChannel>,
+    @IVSCursedService private readonly vscursed: IVSCursedService,
+    @IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
     @IInstantiationService instantiationService: IInstantiationService,
     @IStorageService private readonly storageService: IStorageService,
-    @IQuickInputService private readonly quickInputService: IQuickInputService,
     @IDialogService private readonly dialogService: IDialogService,
     @INotificationService private readonly notificationService: INotificationService,
     @IWorkbenchExtensionManagementService
@@ -121,11 +137,13 @@ export class DevelopmentDebugger extends Disposable {
     @IURLService urlService: IURLService,
   ) {
     super()
+    if (targetRegistration(environmentService.debugExtensionHost.env)) {
+      throw new Error('A VSCursed Development Host cannot start Development Hosts itself')
+    }
     const stored = storageService.get(authorizationStorageKey, StorageScope.PROFILE, '[]')
     this.authorizations = ProviderAuthorizations.parse(JSON.parse(stored))
     if (JSON.stringify(this.authorizations) !== stored) this.persistAuthorizations()
     this._register(urlService.registerHandler(this))
-    this.registerCommands()
     this.tree = this.registerView(instantiationService)
   }
 
@@ -200,14 +218,14 @@ export class DevelopmentDebugger extends Disposable {
         try {
           await this.stopDebugSession(session)
         } finally {
-          await this.channels[realm].call('debugRelease', extensionId)
+          await this.vscursed.channel(realm).call('debugRelease', extensionId)
         }
       }
     }
     try {
       for (const realm of ['main', 'sharedProcess'] as const) {
         if (!manifest[realm]) continue
-        const endpoint = await this.channels[realm].call<DebugEndpoint>('debugAcquire', extensionId)
+        const endpoint = await this.vscursed.channel(realm).call<DebugEndpoint>('debugAcquire', extensionId)
         try {
           const config: RealmAttachConfig = {
             type: 'node',
@@ -226,7 +244,7 @@ export class DevelopmentDebugger extends Disposable {
             session: await this.startDebugSession(config, { parentSession: root, compact: true }),
           })
         } catch (error) {
-          await this.channels[realm].call('debugRelease', extensionId)
+          await this.vscursed.channel(realm).call('debugRelease', extensionId)
           throw error
         }
       }
@@ -289,70 +307,10 @@ export class DevelopmentDebugger extends Disposable {
     }
   }
 
-  private registerCommands() {
-    this._register(
-      CommandsRegistry.registerCommand(importCommand, async (_accessor, value?: unknown) => {
-        const input =
-          typeof value === 'string'
-            ? value
-            : await this.quickInputService.input({
-                prompt: 'Paste the vscodium://vscursed provider URI printed by Vite+',
-                placeHolder: 'vscodium://vscursed/provider/import?...',
-              })
-        if (input) await this.handleURL(URI.parse(input))
-      }),
-    )
-    this._register(
-      CommandsRegistry.registerCommand(disconnectCommand, async (_accessor, requested?: unknown) => {
-        let extensionId =
-          typeof requested === 'string'
-            ? requested
-            : (requested as Partial<TreeViewItemHandleArg> | undefined)?.$treeItemHandle
-        if (!extensionId) {
-          const selected = await this.quickInputService.pick<AuthorizationPick>(
-            this.authorizations.map(authorization => ({
-              extensionId: authorization.extensionId,
-              label: authorization.extensionId,
-              description: authorization.workspace,
-            })),
-            { placeHolder: 'Select a Vite+ provider to disconnect' },
-          )
-          extensionId = selected?.extensionId
-        }
-        if (!extensionId) return
-        await this.sessions.get(extensionId)?.stop()
-        this.authorizations = this.authorizations.filter(current => current.extensionId !== extensionId)
-        this.persistAuthorizations()
-      }),
-    )
-    for (const item of [
-      {
-        id: MenuId.CommandPalette,
-        command: { id: importCommand, title: 'Import Vite+ Provider', category: 'VSCursed' },
-      },
-      {
-        id: MenuId.CommandPalette,
-        command: { id: disconnectCommand, title: 'Disconnect Vite+ Provider', category: 'VSCursed' },
-      },
-      {
-        id: MenuId.ViewTitle,
-        command: { id: importCommand, title: 'Import Vite+ Provider', icon: Codicon.add },
-        when: ContextKeyExpr.equals('view', targetsViewId),
-        group: 'navigation',
-      },
-      {
-        id: MenuId.ViewItemContext,
-        command: { id: disconnectCommand, title: 'Disconnect Provider', icon: Codicon.debugDisconnect },
-        when: ContextKeyExpr.and(
-          ContextKeyExpr.equals('view', targetsViewId),
-          ContextKeyExpr.equals('viewItem', 'vscursed-target'),
-        ),
-        group: 'inline',
-      },
-    ]) {
-      const { id, ...menuItem } = item
-      this._register(MenuRegistry.appendMenuItem(id, menuItem))
-    }
+  async disconnect(extensionId: string) {
+    await this.sessions.get(extensionId)?.stop()
+    this.authorizations = this.authorizations.filter(current => current.extensionId !== extensionId)
+    this.persistAuthorizations()
   }
 
   private registerView(instantiationService: IInstantiationService) {
@@ -384,3 +342,81 @@ export class DevelopmentDebugger extends Disposable {
     )
   }
 }
+
+registerSingleton(IDevelopmentDebugger, DevelopmentDebugger, InstantiationType.Eager)
+
+const notInTarget = isDevelopmentTargetContext.negate()
+
+registerAction2(
+  class ImportProvider extends Action2 {
+    constructor() {
+      super({
+        id: 'vscursed.importProvider',
+        title: localize2('vscursed.importProvider', 'Import Vite+ Provider'),
+        category: vscursedCategory,
+        icon: Codicon.add,
+        f1: true,
+        precondition: notInTarget,
+        menu: { id: MenuId.ViewTitle, when: ContextKeyExpr.equals('view', targetsViewId), group: 'navigation' },
+      })
+    }
+
+    async run(accessor: ServicesAccessor, value?: unknown) {
+      const debuggerService = accessor.get(IDevelopmentDebugger)
+      const quickInputService = accessor.get(IQuickInputService)
+      const input =
+        typeof value === 'string'
+          ? value
+          : await quickInputService.input({
+              prompt: 'Paste the vscodium://vscursed provider URI printed by Vite+',
+              placeHolder: 'vscodium://vscursed/provider/import?...',
+            })
+      if (input) await debuggerService.handleURL(URI.parse(input))
+    }
+  },
+)
+
+registerAction2(
+  class DisconnectProvider extends Action2 {
+    constructor() {
+      super({
+        id: 'vscursed.disconnectProvider',
+        title: localize2('vscursed.disconnectProvider', 'Disconnect Vite+ Provider'),
+        category: vscursedCategory,
+        icon: Codicon.debugDisconnect,
+        f1: true,
+        precondition: notInTarget,
+        menu: {
+          id: MenuId.ViewItemContext,
+          when: ContextKeyExpr.and(
+            ContextKeyExpr.equals('view', targetsViewId),
+            ContextKeyExpr.equals('viewItem', 'vscursed-target'),
+          ),
+          group: 'inline',
+        },
+      })
+    }
+
+    async run(accessor: ServicesAccessor, requested?: unknown) {
+      const debuggerService = accessor.get(IDevelopmentDebugger)
+      const quickInputService = accessor.get(IQuickInputService)
+      // The Targets view passes its item handle, which is the extension id.
+      let extensionId =
+        typeof requested === 'string'
+          ? requested
+          : (requested as Partial<TreeViewItemHandleArg> | undefined)?.$treeItemHandle
+      if (!extensionId) {
+        const selected = await quickInputService.pick<AuthorizationPick>(
+          debuggerService.authorizations.map(authorization => ({
+            extensionId: authorization.extensionId,
+            label: authorization.extensionId,
+            description: authorization.workspace,
+          })),
+          { placeHolder: 'Select a Vite+ provider to disconnect' },
+        )
+        extensionId = selected?.extensionId
+      }
+      if (extensionId) await debuggerService.disconnect(extensionId)
+    }
+  },
+)

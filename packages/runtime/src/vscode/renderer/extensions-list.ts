@@ -29,15 +29,19 @@ function renderIndicator(extension: IExtension, data: ITemplateData) {
 }
 
 /** Adds a VSCursed capability indicator to VS Code's existing virtualized extension list. */
-export function contributeExtensionsList(ctx: Context) {
-  ctx.interceptor.around(ExtensionsListRenderer.prototype, 'renderElement', function (next, extension, index, data) {
-    next(extension, index, data)
-    renderIndicator(extension, data)
-  })
-  ctx.effect(
-    () => () => {
-      for (const indicator of document.querySelectorAll(`.${indicatorClass}`)) indicator.remove()
-    },
-    'vscursed.extensionsListIndicator',
-  )
+export const extensionsListIndicator = {
+  name: 'vscursed.extensionsList',
+  inject: ['interceptor'],
+  apply(ctx: Context) {
+    ctx.interceptor.around(ExtensionsListRenderer.prototype, 'renderElement', function (next, extension, index, data) {
+      next(extension, index, data)
+      renderIndicator(extension, data)
+    })
+    ctx.effect(
+      () => () => {
+        for (const indicator of document.querySelectorAll(`.${indicatorClass}`)) indicator.remove()
+      },
+      'vscursed.extensionsListIndicator',
+    )
+  },
 }

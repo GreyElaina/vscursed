@@ -7,6 +7,7 @@
     "upstream": "node scripts/upstream.ts",
     "dev": "node scripts/dev.ts",
     "build": "vp run -r --concurrency-limit 1 build",
+    "app": "pnpm build && pnpm upstream package && node scripts/sign-app.ts",
     "typecheck": "vp run -r --concurrency-limit 1 typecheck",
     "test": "vp test",
     "check": "vp fmt --check && pnpm typecheck && vp test && pnpm upstream check",

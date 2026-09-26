@@ -162,8 +162,19 @@ switch (positionals[0]) {
   case 'package': {
     const env = { ...vscodiumEnv(), VSCODE_PUBLISH_COUNTER: '1' }
     const target = `vscode-${env.OS_NAME === 'osx' ? 'darwin' : env.OS_NAME === 'windows' ? 'win32' : 'linux'}-${env.VSCODE_ARCH}-min-packing`
-    await npm(['run', 'gulp', '--', 'vscode-min-prepack'], { env })
-    await npm(['run', 'gulp', '--', target], { env })
+    const gulp = (task: string) =>
+      limited(
+        'node',
+        [
+          '--experimental-strip-types',
+          `--max-old-space-size=${process.env.VSCURSED_MAX_OLD_SPACE_SIZE ?? '8192'}`,
+          'node_modules/gulp/bin/gulp.js',
+          task,
+        ],
+        { cwd: vscodeRoot, env },
+      )
+    await gulp('vscode-min-prepack')
+    await gulp(target)
     break
   }
   default:

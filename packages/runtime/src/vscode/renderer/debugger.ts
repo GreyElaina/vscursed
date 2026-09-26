@@ -110,7 +110,7 @@ export interface IDevelopmentDebugger {
   readonly _serviceBrand: undefined
   /** The provider workspaces this profile trusts, one per extension. */
   readonly authorizations: readonly ProviderAuthorization[]
-  /** Imports a `vscodium://vscursed/provider/import` URI; returns whether it was one. */
+  /** Imports a `vscursed://vscursed/provider/import` URI; returns whether it was one. */
   handleURL(uri: URI): Promise<boolean>
   /** Stops the extension's Target and forgets its provider workspace. */
   disconnect(extensionId: string): Promise<void>
@@ -148,7 +148,7 @@ class DevelopmentDebugger extends Disposable implements IDevelopmentDebugger, IU
   }
 
   async handleURL(uri: URI, _options?: IOpenURLOptions) {
-    if (uri.scheme !== 'vscodium' || uri.authority !== 'vscursed' || uri.path !== '/provider/import') return false
+    if (uri.scheme !== 'vscursed' || uri.authority !== 'vscursed' || uri.path !== '/provider/import') return false
     const params = new URLSearchParams(uri.query)
     await this.import(
       ProviderRegistration.parse({
@@ -368,8 +368,8 @@ registerAction2(
         typeof value === 'string'
           ? value
           : await quickInputService.input({
-              prompt: 'Paste the vscodium://vscursed provider URI printed by Vite+',
-              placeHolder: 'vscodium://vscursed/provider/import?...',
+              prompt: 'Paste the vscursed://vscursed provider URI printed by Vite+',
+              placeHolder: 'vscursed://vscursed/provider/import?...',
             })
       if (input) await debuggerService.handleURL(URI.parse(input))
     }

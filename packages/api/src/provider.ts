@@ -16,7 +16,7 @@ export type ProviderAuthorization = z.infer<typeof ProviderAuthorization>
 
 export const ProviderAuthorizations = z.array(ProviderAuthorization)
 
-/** What the `vscodium://vscursed/provider/import` URI printed by a Vite+ provider carries. */
+/** What the `vscursed://vscursed/provider/import` URI printed by a Vite+ provider carries. */
 export const ProviderRegistration = z.extend(ProviderAuthorization, {
   endpoint: nonEmpty(),
 })

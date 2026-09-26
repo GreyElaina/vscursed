@@ -1,0 +1,95 @@
+diff --git a/product.json b/product.json
+--- a/product.json
++++ b/product.json
+@@ -1,7 +1,8 @@
+ {
+-  "nameShort": "VSCodium",
+-  "nameLong": "VSCodium",
+-  "applicationName": "codium",
++  "nameShort": "VSCursed",
++  "nameLong": "VSCursed",
++  "applicationName": "vscursed",
++  "userDataFolderName": "VSCodium",
+   "dataFolderName": ".vscode-oss",
+   "sharedDataFolderName": ".vscode-oss-shared",
+   "win32MutexName": "vscodium",
+@@ -24,8 +25,8 @@
+   "win32AppUserModelId": "VSCodium.VSCodium",
+   "win32ShellNameShort": "VSCodium",
+   "win32TunnelServiceMutex": "vscodium-tunnelservice",
+   "win32TunnelMutex": "vscodium-tunnel",
+-  "darwinBundleIdentifier": "com.vscodium",
++  "darwinBundleIdentifier": "io.github.greyelaina.vscursed",
+   "darwinProfileUUID": "47827DD9-4734-49A0-AF80-7E19B11495CC",
+   "darwinProfilePayloadUUID": "CF808BE7-53F3-46C6-A7E2-7EDB98A5E959",
+   "linuxIconName": "vscodium",
+@@ -33,7 +34,7 @@
+   "reportIssueUrl": "https://github.com/VSCodium/vscodium/issues/new",
+   "nodejsArtifactFeed": "",
+   "electronArtifactFeed": "",
+-  "urlProtocol": "vscodium",
++  "urlProtocol": "vscursed",
+   "agentsTelemetryAppName": "agents",
+   "webviewContentExternalBaseUrlTemplate": "https://{{uuid}}.vscode-cdn.net/insider/ef65ac1ba57f57f2a3961bfe94aa20481caca4c6/out/vs/workbench/contrib/webview/browser/pre/",
+   "builtInExtensions": [
+@@ -257,7 +258,6 @@
+   "requestFeatureUrl": "https://go.microsoft.com/fwlink/?LinkID=533482",
+   "tipsAndTricksUrl": "https://go.microsoft.com/fwlink/?linkid=852118",
+   "twitterUrl": "https://go.microsoft.com/fwlink/?LinkID=533687",
+-  "updateUrl": "https://raw.githubusercontent.com/VSCodium/versions/refs/heads/master",
+   "downloadUrl": "https://github.com/VSCodium/vscodium/releases",
+   "quality": "stable",
+   "win32AppId": "{{763CBF88-25C6-4B10-952F-326AE657F16B}",
+diff --git a/src/cli.ts b/src/cli.ts
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -32,6 +32,6 @@ await import('./vs/code/node/cli.js');
+ 
+ function resolveUserProduct() {
+-	const userDataPath = getUserDataPath({_:[]}, product.nameShort ?? 'code-oss-dev');
++	const userDataPath = getUserDataPath({_:[]}, product.userDataFolderName ?? product.nameShort ?? 'code-oss-dev');
+ 	const userProductPath = path.join(userDataPath, 'product.json');
+ 
+ 	try {
+@@ -42,4 +42,4 @@ function resolveUserProduct() {
+ 		globalThis._VSCODE_USER_PRODUCT_JSON = productJson;
+ 	} catch (ex) {
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git a/src/main.ts b/src/main.ts
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -57,7 +57,7 @@
+ }
+ 
+ // Set userData path before app 'ready' event
+-const userDataPath = getUserDataPath(args, product.nameShort ?? 'code-oss-dev');
++const userDataPath = getUserDataPath(args, product.userDataFolderName ?? product.nameShort ?? 'code-oss-dev');
+ if (process.platform === 'win32') {
+ 	const userDataUNCHost = getUNCHost(userDataPath);
+ 	if (userDataUNCHost) {
+diff --git a/src/vs/base/common/product.ts b/src/vs/base/common/product.ts
+--- a/src/vs/base/common/product.ts
++++ b/src/vs/base/common/product.ts
+@@ -104,6 +104,7 @@ export interface IProductConfiguration {
+ 
+ 	readonly nameShort: string;
+ 	readonly nameLong: string;
++	readonly userDataFolderName?: string;
+ 
+ 	readonly win32AppUserModelId?: string;
+ 	readonly win32MutexName?: string;
+diff --git a/src/vs/platform/environment/node/environmentService.ts b/src/vs/platform/environment/node/environmentService.ts
+--- a/src/vs/platform/environment/node/environmentService.ts
++++ b/src/vs/platform/environment/node/environmentService.ts
+@@ -17,7 +17,7 @@ export class NativeEnvironmentService extends AbstractNativeEnvironmentService {
+ 		super(args, {
+ 			homeDir,
+ 			tmpDir: tmpdir(),
+-			userDataDir: getUserDataPath(args, productService.nameShort),
++			userDataDir: getUserDataPath(args, productService.userDataFolderName ?? productService.nameShort),
+ 		}, productService);
+ 	}
+ }

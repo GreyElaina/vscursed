@@ -25,7 +25,7 @@ export class DevelopmentProvider {
 
   constructor(extensionId: string, workspace: string, manifest: PluginManifest, endpoint = generateRandomPipeName()) {
     this.hello = { protocol: providerProtocol, extensionId, workspace, manifest }
-    const uri = new URL('vscodium://vscursed/provider/import')
+    const uri = new URL('vscursed://vscursed/provider/import')
     uri.searchParams.set('extensionId', extensionId)
     // VS Code's URI parser decodes the complete query before the handler parses its fields.
     uri.searchParams.set('workspace', encodeURIComponent(workspace))

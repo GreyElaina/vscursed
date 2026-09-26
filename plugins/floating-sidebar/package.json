@@ -1,0 +1,66 @@
+{
+  "name": "floating-sidebar",
+  "displayName": "VSCursed: Floating Side Bar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lets the side bar float over the editor instead of pushing it aside, with a pin to dock it again.",
+  "categories": [
+    "Other"
+  ],
+  "license": "MIT",
+  "publisher": "vscursed",
+  "files": [
+    "dist",
+    "package.nls.json",
+    "package.nls.zh-cn.json"
+  ],
+  "type": "module",
+  "main": "./dist/extensionHost.js",
+  "scripts": {
+    "build": "vp pack && vscursed vsix",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@vscursed/api": "workspace:*",
+    "@vscursed/build": "workspace:*",
+    "cordis": "4.0.0-rc.10",
+    "zod": "^4.6.5"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "vscursed.floatingSidebar.togglePrimary",
+        "title": "%command.togglePrimary%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "vscursed.floatingSidebar.toggleSecondary",
+        "title": "%command.toggleSecondary%",
+        "category": "%command.category%"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "vscursed.floatingSidebar.togglePrimary",
+        "key": "ctrl+k b",
+        "mac": "ctrl+cmd+b"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "vscursed.floatingSidebar.toggleSecondary",
+          "when": "vscursed.floatingSidebar.secondary"
+        }
+      ]
+    }
+  },
+  "activationEvents": [],
+  "engines": {
+    "vscode": "^1.135.0"
+  },
+  "vscursed": {
+    "renderer": "./dist/renderer.js",
+    "extensionHost": "./dist/extensionHost.js"
+  }
+}

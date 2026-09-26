@@ -1,0 +1,5 @@
+{
+  "command.category": "Floating Side Bar",
+  "command.togglePrimary": "Pin or Float Primary Side Bar",
+  "command.toggleSecondary": "Pin or Float Secondary Side Bar"
+}

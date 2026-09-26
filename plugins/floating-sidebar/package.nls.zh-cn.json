@@ -1,0 +1,5 @@
+{
+  "command.category": "浮动侧栏",
+  "command.togglePrimary": "固定或浮动主侧栏",
+  "command.toggleSecondary": "固定或浮动辅助侧栏"
+}
